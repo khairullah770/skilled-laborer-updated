@@ -1,5 +1,5 @@
 import React from 'react';
-import { StyleSheet, Text, TextStyle, TouchableOpacity, TouchableOpacityProps, ViewStyle } from 'react-native';
+import { StyleSheet, Text, TextStyle, TouchableOpacity, TouchableOpacityProps, ViewStyle, ActivityIndicator } from 'react-native';
 import Colors from '../constants/Colors';
 
 interface ButtonProps extends TouchableOpacityProps {
@@ -7,9 +7,10 @@ interface ButtonProps extends TouchableOpacityProps {
     type?: 'primary' | 'secondary' | 'outline';
     style?: ViewStyle;
     textStyle?: TextStyle;
+    loading?: boolean;
 }
 
-const Button: React.FC<ButtonProps> = ({ text, type = 'primary', style, textStyle, ...props }) => {
+const Button: React.FC<ButtonProps> = ({ text, type = 'primary', style, textStyle, loading, ...props }) => {
     const getBackgroundColor = () => {
         switch (type) {
             case 'primary':
@@ -45,11 +46,16 @@ const Button: React.FC<ButtonProps> = ({ text, type = 'primary', style, textStyl
                 style,
             ]}
             activeOpacity={0.8}
+            disabled={loading || props.disabled}
             {...props}
         >
-            <Text style={[styles.text, { color: getTextColor() }, textStyle]}>
-                {text}
-            </Text>
+            {loading ? (
+                <ActivityIndicator color={getTextColor()} />
+            ) : (
+                <Text style={[styles.text, { color: getTextColor() }, textStyle]}>
+                    {text}
+                </Text>
+            )}
         </TouchableOpacity>
     );
 };

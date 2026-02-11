@@ -1,46 +1,54 @@
-import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import React from 'react';
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function RoleSelectionScreen() {
     const router = useRouter();
 
-    const handleSelectRole = (role: 'customer' | 'laborer') => {
-        router.push({ pathname: '/(auth)/signup', params: { role } });
+    const goToCustomerLogin = () => {
+        router.push({ pathname: '/(auth)/login', params: { role: 'customer' } });
+    };
+
+    const goToLaborerLogin = () => {
+        router.push('/(auth)/laborer-login');
     };
 
     return (
         <SafeAreaView style={styles.container}>
-            <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-                <Ionicons name="chevron-back" size={24} color="#000" />
-            </TouchableOpacity>
+            <View style={styles.logoContainer}>
+                <Image
+                    source={require('../../assets/images/logo2.png')}
+                    style={styles.logo}
+                    resizeMode="contain"
+                />
+            </View>
 
-            <Text style={styles.title}>Register as</Text>
+            <View style={styles.topBackground}>
+                <Image
+                    source={require('../../assets/images/laborer_header.png')}
+                    style={styles.heroImage}
+                    resizeMode="contain"
+                />
+            </View>
 
-            <View style={styles.optionsContainer}>
-                <TouchableOpacity
-                    style={styles.optionCard}
-                    onPress={() => handleSelectRole('customer')}
-                    activeOpacity={0.8}
-                >
-                    <View style={[styles.iconContainer, { backgroundColor: '#E0F2FE' }]}>
-                        <Ionicons name="person" size={40} color="#0284C7" />
-                    </View>
-                    <Text style={styles.optionText}>Customer</Text>
-                </TouchableOpacity>
+            <View style={styles.bottomCard}>
+                <Text style={styles.cardTitle}>Welcome to Skilled Laborer Services</Text>
 
-                <TouchableOpacity
-                    style={styles.optionCard}
-                    onPress={() => handleSelectRole('laborer')}
-                    activeOpacity={0.8}
-                >
-                    <View style={[styles.iconContainer, { backgroundColor: '#FEF3C7' }]}>
-                        <Ionicons name="construct" size={40} color="#D97706" />
-                    </View>
-                    <Text style={styles.optionText}>Skilled Laborer</Text>
-                </TouchableOpacity>
+                <View style={styles.buttonsContainer}>
+                    <TouchableOpacity style={[styles.button, styles.primaryButton]} onPress={goToCustomerLogin}>
+                        <Text style={styles.primaryButtonText}>I'm a customer</Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity style={[styles.button, styles.secondaryButton]} onPress={goToLaborerLogin}>
+                        <View style={styles.secondaryContent}>
+
+                            <Text style={styles.secondaryButtonText}>I'm a Skilled Laborer</Text>
+                        </View>
+                    </TouchableOpacity>
+                </View>
+
+
             </View>
         </SafeAreaView>
     );
@@ -50,46 +58,79 @@ const styles = StyleSheet.create({
     container: {
         flex: 1,
         backgroundColor: '#FFFFFF',
-        padding: 20,
     },
-    backButton: {
-        marginBottom: 20,
-    },
-    title: {
-        fontSize: 28,
-        fontWeight: 'bold',
-        color: '#1F41BB',
-        textAlign: 'center',
-        marginBottom: 50,
-    },
-    optionsContainer: {
-        gap: 20,
-    },
-    optionCard: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: '#FFFFFF',
-        padding: 20,
-        borderRadius: 16,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 4,
-        elevation: 3,
-        borderWidth: 1,
-        borderColor: '#F3F4F6',
-    },
-    iconContainer: {
-        width: 60,
-        height: 60,
-        borderRadius: 30,
+    logoContainer: {
         alignItems: 'center',
         justifyContent: 'center',
-        marginRight: 20,
+        paddingTop: 40,
+        paddingBottom: 32,
     },
-    optionText: {
-        fontSize: 18,
+    logo: {
+        width: 340,
+        height: 170,
+        maxWidth: 320,
+        maxHeight: 140,
+    },
+    topBackground: {
+        flex: 1,
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingTop: 24,
+    },
+    heroImage: {
+        width: '115%',
+        height: '115%',
+    },
+    bottomCard: {
+        backgroundColor: '#1F41BB',
+        paddingHorizontal: 24,
+        paddingTop: 24,
+        paddingBottom: 16,
+        borderTopLeftRadius: 32,
+        borderTopRightRadius: 32,
+    },
+    cardTitle: {
+        fontSize: 20,
+        fontWeight: '700',
+        color: '#FFFFFF',
+        textAlign: 'center',
+        marginBottom: 16,
+        letterSpacing: 0.3,
+    },
+    buttonsContainer: {
+        width: '100%',
+        gap: 12,
+        marginTop: 8,
+    },
+    button: {
+        width: '100%',
+        paddingVertical: 14,
+        borderRadius: 8,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    primaryButton: {
+        backgroundColor: '#FFFFFF',
+    },
+    primaryButtonText: {
+        fontSize: 16,
         fontWeight: '600',
-        color: '#1F2937',
+        color: '#1F41BB',
+    },
+    secondaryButton: {
+        backgroundColor: '#1D3AA5',
+    },
+    secondaryContent: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    secondaryIcon: {
+        marginRight: 8,
+    },
+    secondaryButtonText: {
+        fontSize: 16,
+        fontWeight: '600',
+        color: '#FFFFFF',
     },
 });

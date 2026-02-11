@@ -4,14 +4,16 @@ import { StyleSheet, Text, TextInput, TextInputProps, View, ViewStyle } from 're
 interface InputProps extends TextInputProps {
     label?: string;
     prefix?: string;
+    suffix?: React.ReactNode;
     containerStyle?: ViewStyle;
+    inputContainerStyle?: ViewStyle;
 }
 
-const Input: React.FC<InputProps> = ({ label, prefix, containerStyle, style, ...props }) => {
+const Input: React.FC<InputProps> = ({ label, prefix, suffix, containerStyle, inputContainerStyle, style, ...props }) => {
     return (
         <View style={[styles.container, containerStyle]}>
             {label && <Text style={styles.label}>{label}</Text>}
-            <View style={styles.inputContainer}>
+            <View style={[styles.inputContainer, inputContainerStyle]}>
                 {prefix && (
                     <View style={styles.prefixContainer}>
                         <Text style={styles.prefixText}>{prefix}</Text>
@@ -22,6 +24,11 @@ const Input: React.FC<InputProps> = ({ label, prefix, containerStyle, style, ...
                     placeholderTextColor="#9CA3AF"
                     {...props}
                 />
+                {suffix && (
+                    <View style={styles.suffixContainer}>
+                        {suffix}
+                    </View>
+                )}
             </View>
         </View>
     );
@@ -69,6 +76,10 @@ const styles = StyleSheet.create({
         fontSize: 16,
         color: '#000',
         height: '100%',
+    },
+    suffixContainer: {
+        justifyContent: 'center',
+        alignItems: 'center',
     },
 });
 

@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import { Image, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -8,13 +8,26 @@ import Input from '../../components/Input';
 
 export default function LoginScreen() {
     const router = useRouter();
-    const [phone, setPhone] = useState('');
+    const params = useLocalSearchParams<{ role?: string }>();
+
+    const initialRole: 'customer' | 'laborer' =
+        params.role === 'laborer' ? 'laborer' : 'customer';
+
+    // Role comes from previous screen; UI is designed for customer login style
+    const [selectedRole] = useState<'customer' | 'laborer'>(initialRole);
+
+    const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
 
     const handleLogin = () => {
         // Implement auth logic here
-        // For now, simple navigation
-        router.replace('/(tabs)');
+        // Navigate based on selected role
+        if (selectedRole === 'customer') {
+            router.replace('/(customer)/(tabs)/home');
+        } else {
+            // Laborer flow (placeholder route for now)
+            router.replace('/(laborer)');
+        }
     };
 
     const handleCreateAccount = () => {
@@ -25,50 +38,65 @@ export default function LoginScreen() {
         <SafeAreaView style={styles.container}>
             <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
                 <ScrollView contentContainerStyle={styles.scrollContent}>
-                    <View style={styles.header}>
-                        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-                            <Ionicons name="chevron-back" size={24} color="#000" />
-                        </TouchableOpacity>
-                    </View>
+                    <View style={styles.card}>
+                        <View style={styles.logoSection}>
+                            <Image
+                                source={require('../../assets/images/login-logo.png')}
+                                style={styles.logo}
+                                resizeMode="contain"
+                            />
+                        </View>
 
-                    <View style={styles.logoSection}>
-                        <Image
-                            source={require('../../assets/images/login-logo.png')}
-                            style={styles.logo}
-                            resizeMode="contain"
-                        />
-                    </View>
+                        <Text style={styles.continueText}>CONTINUE WITH</Text>
 
-                    <Text style={styles.title}>WELCOME BACK</Text>
+                        <View style={styles.socialRow}>
+                            <TouchableOpacity style={styles.socialButton}>
+                                <Ionicons name="logo-google" size={22} color="#DB4437" />
+                            </TouchableOpacity>
+                            <TouchableOpacity style={styles.socialButton}>
+                                <Ionicons name="logo-facebook" size={22} color="#1877F2" />
+                            </TouchableOpacity>
 
-                    <View style={styles.form}>
-                        <Input
-                            label="Enter phone number"
-                            prefix="+92"
-                            placeholder=""
-                            keyboardType="phone-pad"
-                            value={phone}
-                            onChangeText={setPhone}
-                        />
+                        </View>
 
-                        <Input
-                            label="Enter password"
-                            placeholder=""
-                            secureTextEntry
-                            value={password}
-                            onChangeText={setPassword}
-                        />
+                        <View style={styles.form}>
+                            <Input
+                                label="Email"
+                                placeholder="Enter your email"
+                                keyboardType="email-address"
+                                value={email}
+                                onChangeText={setEmail}
+                            />
 
-                        <View style={styles.spacer} />
+                            <Input
+                                label="Password"
+                                placeholder="Enter your password"
+                                secureTextEntry
+                                value={password}
+                                onChangeText={setPassword}
+                            />
 
-                        <Button text="login" onPress={handleLogin} />
+                            <TouchableOpacity style={styles.forgotPasswordContainer}>
+                                <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
+                            </TouchableOpacity>
 
-                        <Button
-                            text="Register"
-                            type="secondary"
-                            onPress={() => router.push('/(auth)/role-selection')}
-                            style={styles.createButton}
-                        />
+                            <View style={styles.spacer} />
+
+                            <Button
+                                text="Login"
+                                onPress={handleLogin}
+                                style={styles.loginButton}
+                            />
+                        </View>
+
+                        <View style={styles.footerTextContainer}>
+                            <Text style={styles.footerText}>
+                                Don&apos;t have an account?{' '}
+                                <Text style={styles.footerLink} onPress={handleCreateAccount}>
+                                    Sign Up Here
+                                </Text>
+                            </Text>
+                        </View>
                     </View>
                 </ScrollView>
             </KeyboardAvoidingView>
@@ -84,32 +112,63 @@ const styles = StyleSheet.create({
         backgroundColor: '#FFFFFF',
     },
     scrollContent: {
-        padding: 20,
+        paddingHorizontal: 24,
+        paddingVertical: 32,
         flexGrow: 1,
+        justifyContent: 'center',
     },
-    header: {
-        alignItems: 'flex-start',
-    },
-    backButton: {
-        padding: 10,
-        marginLeft: -10,
+    card: {
+        width: '100%',
+        borderRadius: 0,
+        paddingHorizontal: 0,
+        paddingVertical: 0,
+        backgroundColor: '#FFFFFF',
+        alignItems: 'center',
     },
     logoSection: {
         alignItems: 'center',
-        marginVertical: 0,   // reduce vertical space
-        marginTop: -20,     // move upward
-        height: 200,        // give more room for bigger logo
+        marginBottom: 28,
     },
     logo: {
-        width: 240,
-        height: 240,
+        width: 210,
+        height: 210,
     },
-    title: {
-        fontSize: 28,
-        fontWeight: 'bold',
+    appTitle: {
+        fontSize: 24,
+        fontWeight: '700',
+        letterSpacing: 1,
+        color: '#111827',
+        textAlign: 'center',
+    },
+    appSubtitle: {
+        fontSize: 12,
+        fontWeight: '600',
         color: '#1F41BB',
         textAlign: 'center',
-        marginBottom: 40,
+        marginBottom: 24,
+    },
+    continueText: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: '#666',
+        textAlign: 'center',
+        marginBottom: 10,
+    },
+    socialRow: {
+        flexDirection: 'row',
+        justifyContent: 'center',
+        alignItems: 'center',
+        gap: 16,
+        marginBottom: 24,
+    },
+    socialButton: {
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        borderWidth: 1,
+        borderColor: '#E5E7EB',
+        alignItems: 'center',
+        justifyContent: 'center',
     },
     form: {
         width: '100%',
@@ -117,15 +176,30 @@ const styles = StyleSheet.create({
     spacer: {
         height: 20,
     },
-    createButton: {
-        backgroundColor: '#E5E7EB',
+    loginButton: {
+        marginTop: 4,
+        borderRadius: 24,
     },
-    label: {
+    footerTextContainer: {
+        marginTop: 16,
+    },
+    footerText: {
+        fontSize: 12,
+        color: '#6B7280',
+        textAlign: 'center',
+    },
+    footerLink: {
+        color: '#1f41bb',
+        fontWeight: '600',
+    },
+    forgotPasswordContainer: {
+        alignSelf: 'flex-end',
+        marginTop: 8,
+        marginBottom: 8,
+    },
+    forgotPasswordText: {
         fontSize: 14,
-        marginBottom: 6,
-        textAlign: 'left',   // <-- force left
-        alignSelf: 'flex-start',
-        paddingLeft: 6,
-    }
-
+        color: '#1F41BB',
+        fontWeight: '600',
+    },
 });

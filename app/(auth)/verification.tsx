@@ -6,13 +6,16 @@ import Button from '../../components/Button';
 
 export default function VerificationScreen() {
     const router = useRouter();
-    const { phone } = useLocalSearchParams();
+    const { phone, email, target } = useLocalSearchParams();
+    const identifier = (email as string) || (phone as string) || '';
+    const targetRoute = (target as string) || '/(customer)/(tabs)/home';
+
     const [code, setCode] = useState(['', '', '', '']);
     const inputs = useRef<Array<TextInput | null>>([]);
 
     const handleVerify = () => {
         // Verify logic
-        router.replace('/(tabs)');
+        router.replace(targetRoute as any);
     };
 
     const handleChange = (text: string, index: number) => {
@@ -41,7 +44,7 @@ export default function VerificationScreen() {
                 <Text style={styles.subtitle}>
                     We have sent you a 4 digit verification code on
                 </Text>
-                <Text style={styles.phoneNumber}>+92 3475644055</Text>
+                <Text style={styles.phoneNumber}>{identifier}</Text>
 
                 <View style={styles.codeContainer}>
                     {code.map((digit, index) => (

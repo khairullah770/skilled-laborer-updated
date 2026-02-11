@@ -9,7 +9,7 @@ export default function SplashScreen() {
     useEffect(() => {
         // Simulate loading or check auth
         const timer = setTimeout(() => {
-            router.replace('/(auth)/login');
+            router.replace('/(auth)/role-selection');
         }, 2000);
 
         return () => clearTimeout(timer);
@@ -37,8 +37,8 @@ const styles = StyleSheet.create({
     },
     logoContainer: {
         alignItems: 'center',
-        width: 200,
-        height: 200,
+        width: 300,
+        height: 300,
     },
     logo: {
         width: '100%',
