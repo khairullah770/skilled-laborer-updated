@@ -7,6 +7,7 @@ import { useEffect } from 'react';
 import 'react-native-reanimated';
 
 import { ThemeProvider as CustomThemeProvider, useTheme } from '../context/ThemeContext';
+import { UserProvider } from '../context/UserContext';
 
 export {
   // Catch any errors thrown by the Layout component.
@@ -44,10 +45,13 @@ export default function RootLayout() {
 
   return (
     <CustomThemeProvider>
-      <RootLayoutNav />
+      <UserProvider>
+        <RootLayoutNav />
+      </UserProvider>
     </CustomThemeProvider>
   );
 }
+
 
 function RootLayoutNav() {
   const { colorScheme } = useTheme();
@@ -57,7 +61,9 @@ function RootLayoutNav() {
       <Stack>
         <Stack.Screen name="index" options={{ headerShown: false }} />
         <Stack.Screen name="(auth)" options={{ headerShown: false }} />
-        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+        <Stack.Screen name="(customer)" options={{ headerShown: false }} />
+        <Stack.Screen name="(laborer)" options={{ headerShown: false }} />
+        <Stack.Screen name="(admin)" options={{ headerShown: false }} />
       </Stack>
     </ThemeProvider>
   );

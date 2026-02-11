@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
-import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Image, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Button from '../../components/Button';
 import Input from '../../components/Input';
@@ -9,79 +9,129 @@ import Input from '../../components/Input';
 export default function SignupScreen() {
     const router = useRouter();
     const [form, setForm] = useState({
-        fullName: 'Khairullah khaliq',
-        phone: '3475644055',
-        address: 'house # 3 ,street 2 , i-10/4, islamabad',
+        firstName: '',
+        lastName: '',
+        email: '',
+        address: '',
         password: '',
         confirmPassword: '',
     });
+    const [acceptTerms, setAcceptTerms] = useState(false);
 
     const handleSignup = () => {
-        router.push({ pathname: '/(auth)/verification', params: { phone: form.phone } });
+        // Validation logic can go here
+        router.push({
+            pathname: '/(auth)/verification',
+            params: {
+                email: form.email,
+                target: '/(customer)/(tabs)/home'
+            }
+        });
+    };
+
+    const handleLogin = () => {
+        router.replace('/(auth)/login');
     };
 
     return (
         <SafeAreaView style={styles.container}>
             <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
-                <ScrollView contentContainerStyle={styles.scrollContent}>
-                    {/* Header if needed, or simple back button */}
-                    {/* Screenshot doesn't confirm header presence but likely has one to go back */}
+                <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+                    <View style={styles.header}>
+                        <Image
+                            source={require('../../assets/images/login-logo.png')}
+                            style={styles.logo}
+                            resizeMode="contain"
+                        />
+                        <Text style={styles.title}>SIGN UP HERE</Text>
+                    </View>
 
-                    <Input
-                        label="Enter Full Name"
-                        placeholder="Khairullah khaliq"
-                        value={form.fullName}
-                        onChangeText={(t) => setForm({ ...form, fullName: t })}
-                    />
+                    <Text style={styles.continueText}>CONTINUE WITH</Text>
+                    <View style={styles.socialRow}>
+                        <TouchableOpacity style={styles.socialIcon}>
+                            <Ionicons name="logo-google" size={28} color="#EA4335" />
+                        </TouchableOpacity>
+                        <TouchableOpacity style={styles.socialIcon}>
+                            <Ionicons name="logo-facebook" size={28} color="#1877F2" />
+                        </TouchableOpacity>
+                        <TouchableOpacity style={styles.socialIcon}>
+                            <Ionicons name="mail" size={28} color="#4285F4" />
+                        </TouchableOpacity>
+                    </View>
 
-                    <Input
-                        label="Enter Phone"
-                        prefix="+92"
-                        placeholder="3475644055"
-                        keyboardType="phone-pad"
-                        value={form.phone}
-                        onChangeText={(t) => setForm({ ...form, phone: t })}
-                    />
+                    <View style={styles.form}>
+                        <View style={styles.row}>
+                            <Input
+                                placeholder="First Name"
+                                value={form.firstName}
+                                onChangeText={(t) => setForm({ ...form, firstName: t })}
+                                containerStyle={styles.halfInput}
+                                inputContainerStyle={styles.roundedInput}
+                            />
+                            <Input
+                                placeholder="Last Name"
+                                value={form.lastName}
+                                onChangeText={(t) => setForm({ ...form, lastName: t })}
+                                containerStyle={styles.halfInput}
+                                inputContainerStyle={styles.roundedInput}
+                            />
+                        </View>
 
-                    <Input
-                        label="Enter Address"
-                        placeholder="Address"
-                        value={form.address}
-                        onChangeText={(t) => setForm({ ...form, address: t })}
-                        multiline
-                    />
+                        <Input
+                            placeholder="Email"
+                            keyboardType="email-address"
+                            value={form.email}
+                            onChangeText={(t) => setForm({ ...form, email: t })}
+                            inputContainerStyle={styles.roundedInput}
+                        />
 
-                    <TouchableOpacity style={styles.mapLink}>
-                        <Ionicons name="location-sharp" size={24} color="#000" />
-                        <Text style={styles.mapLinkText}>choose from map</Text>
-                    </TouchableOpacity>
+                        <Input
+                            placeholder="Address"
+                            value={form.address}
+                            onChangeText={(t) => setForm({ ...form, address: t })}
+                            inputContainerStyle={styles.roundedInput}
+                        />
 
-                    <Input
-                        label="Enter password"
-                        placeholder="***********"
-                        secureTextEntry
-                        value={form.password}
-                        onChangeText={(t) => setForm({ ...form, password: t })}
-                    />
+                        <Input
+                            placeholder="Password"
+                            secureTextEntry
+                            value={form.password}
+                            onChangeText={(t) => setForm({ ...form, password: t })}
+                            inputContainerStyle={styles.roundedInput}
+                        />
 
-                    <Input
-                        label="confrim password"
-                        placeholder="***********"
-                        secureTextEntry
-                        value={form.confirmPassword}
-                        onChangeText={(t) => setForm({ ...form, confirmPassword: t })}
-                    />
+                        <Input
+                            placeholder="Confirm Password"
+                            secureTextEntry
+                            value={form.confirmPassword}
+                            onChangeText={(t) => setForm({ ...form, confirmPassword: t })}
+                            inputContainerStyle={styles.roundedInput}
+                        />
 
-                    <View style={styles.spacer} />
+                        <TouchableOpacity
+                            style={styles.checkboxContainer}
+                            onPress={() => setAcceptTerms(!acceptTerms)}
+                        >
+                            <View style={[styles.checkbox, acceptTerms && styles.checkboxSelected]}>
+                                {acceptTerms && <Ionicons name="checkmark" size={12} color="#FFF" />}
+                            </View>
+                            <Text style={styles.checkboxLabel}>Accept terms and policy</Text>
+                        </TouchableOpacity>
 
-                    <Button text="Signup" onPress={handleSignup} />
+                        <Button
+                            text="Sign Up"
+                            onPress={handleSignup}
+                            style={styles.signupButton}
+                            textStyle={styles.signupButtonText}
+                        />
 
-                    <Button
-                        text="Already Account"
-                        type="secondary"
-                        onPress={() => router.replace('/(auth)/login')}
-                    />
-
+                        <View style={styles.footer}>
+                            <Text style={styles.footerText}>Already have an account?</Text>
+                            <TouchableOpacity onPress={handleLogin}>
+                                <Text style={styles.loginLink}> Login Here</Text>
+                            </TouchableOpacity>
+                        </View>
+                    </View>
                 </ScrollView>
             </KeyboardAvoidingView>
         </SafeAreaView>
@@ -94,24 +144,108 @@ const styles = StyleSheet.create({
         backgroundColor: '#FFFFFF',
     },
     scrollContent: {
-        padding: 20,
-        paddingTop: 40,
+        paddingHorizontal: 24,
+        paddingBottom: 40,
     },
-    mapLink: {
+    header: {
+        alignItems: 'flex-start',
+        marginTop: 20,
+        marginBottom: 20,
+    },
+    logo: {
+        width: 80,
+        height: 80,
+        marginLeft: -10, // Adjust for logo padding if needed
+    },
+    title: {
+        fontSize: 22,
+        fontWeight: '700',
+        color: '#333',
+        marginTop: 10,
+        alignSelf: 'center', // Keep title centered if that's preferred, or let it follow header
+    },
+    continueText: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: '#666',
+        textAlign: 'center',
+        marginBottom: 10,
+    },
+    socialRow: {
+        flexDirection: 'row',
+        justifyContent: 'center',
+        gap: 20,
+        marginBottom: 25,
+    },
+    socialIcon: {
+        padding: 5,
+    },
+    form: {
+        width: '100%',
+    },
+    row: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        width: '100%',
+    },
+    halfInput: {
+        width: '48%',
+    },
+    roundedInput: {
+        borderRadius: 25,
+        borderWidth: 1,
+        borderColor: '#333',
+        height: 50,
+        paddingHorizontal: 20,
+    },
+    checkboxContainer: {
         flexDirection: 'row',
         alignItems: 'center',
-        justifyContent: 'center', // Image shows left aligned or center? Screenshot 3 shows centered below address field? No, "choose from map" is aligned left under the address box in the screenshot.
-        // Wait, Screenshot 3: "house # 3..." input -> then "choose from map" BELOW it, aligned left with icon.
-        alignSelf: 'flex-start',
-        marginLeft: 5,
-        marginVertical: 10,
+        marginVertical: 15,
+        marginLeft: 10,
     },
-    mapLinkText: {
-        color: '#1F41BB', // Blue link
-        marginLeft: 5,
-        fontWeight: '500',
+    checkbox: {
+        width: 18,
+        height: 18,
+        borderWidth: 1,
+        borderColor: '#333',
+        borderRadius: 3,
+        marginRight: 10,
+        alignItems: 'center',
+        justifyContent: 'center',
     },
-    spacer: {
-        height: 30,
+    checkboxSelected: {
+        backgroundColor: '#1F41BB',
+        borderColor: '#1F41BB',
+    },
+    checkboxLabel: {
+        fontSize: 12,
+        color: '#666',
+    },
+    signupButton: {
+        backgroundColor: '#1F41BB',
+        borderRadius: 30,
+        height: 55,
+        marginTop: 10,
+    },
+    signupButtonText: {
+        fontSize: 18,
+        fontWeight: '700',
+    },
+    footer: {
+        flexDirection: 'column',
+        alignItems: 'center',
+        marginTop: 25,
+    },
+    footerText: {
+        fontSize: 14,
+        color: '#333',
+        fontWeight: '600',
+    },
+    loginLink: {
+        fontSize: 14,
+        color: '#1F41BB',
+        fontWeight: '700',
+        marginTop: 5,
     },
 });
