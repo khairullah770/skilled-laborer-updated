@@ -1,5 +1,6 @@
 
 import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import RNDateTimePicker from '@react-native-community/datetimepicker';
 import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
@@ -8,7 +9,8 @@ import React, { useRef, useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, Image, Keyboard, KeyboardAvoidingView, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import MapView, { PROVIDER_GOOGLE, Region } from 'react-native-maps';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { LABORERS } from '../../../constants/Laborers';
+import { API_URL } from '../../../constants/Api';
+import { useBookings } from '../../context/BookingsContext';
 
 type LocationSuggestion = {
     place_id: number;
@@ -20,8 +22,9 @@ type LocationSuggestion = {
 export default function BookingScreen() {
     const { laborerId } = useLocalSearchParams();
     const router = useRouter();
-
-    const laborer = LABORERS.find(l => l.id === laborerId);
+    const { addUpcoming } = useBookings();
+    const [laborer, setLaborer] = useState<any | null>(null);
+    const [loadingLaborer, setLoadingLaborer] = useState(true);
 
     // State for booking
     const [selectedDate, setSelectedDate] = useState(new Date());
@@ -55,6 +58,43 @@ export default function BookingScreen() {
         longitude: 73.0479,
     });
 
+
+    React.useEffect(() => {
+        const load = async () => {
+            if (!laborerId) return;
+            setLoadingLaborer(true);
+            try {
+                const res = await fetch(`${API_URL}/api/users/${laborerId}/public?includeUnapproved=true`);
+                if (res.ok) {
+                    const data = await res.json();
+                    const primaryOffering = Array.isArray(data.offerings) && data.offerings.length > 0 ? data.offerings[0] : null;
+                    setLaborer({
+                        id: laborerId,
+                        name: data.name || 'Laborer',
+                        image: data.profileImage ? `${API_URL}${data.profileImage}` : 'https://cdn.pixabay.com/photo/2015/10/05/22/37/blank-profile-picture-973460_1280.png',
+                        rating: data.rating || 0,
+                        hourlyRate: primaryOffering ? primaryOffering.price : 0,
+                        distance: 0,
+                        verified: data.online,
+                        primaryOffering
+                    });
+                }
+            } catch {}
+            setLoadingLaborer(false);
+        };
+        load();
+    }, [laborerId]);
+
+    if (loadingLaborer) {
+        return (
+            <SafeAreaView style={styles.container}>
+                <Stack.Screen options={{ headerShown: false }} />
+                <View style={{ flex:1, alignItems:'center', justifyContent:'center' }}>
+                    <ActivityIndicator size="large" color="#1F41BB" />
+                </View>
+            </SafeAreaView>
+        );
+    }
 
     if (!laborer) {
         return (
@@ -207,16 +247,52 @@ export default function BookingScreen() {
         setSuggestions([]);
     };
 
-    const handleConfirm = () => {
-        console.log('Booking confirmed', {
-            laborerId,
-            date: selectedDate.toDateString(),
-            time: selectedTime.toTimeString(),
-            address,
-            message: appointmentMessage,
-            images,
-        });
-        setShowSuccess(true);
+    const handleConfirm = async () => {
+        const scheduled = new Date(
+            selectedDate.getFullYear(),
+            selectedDate.getMonth(),
+            selectedDate.getDate(),
+            selectedTime.getHours(),
+            selectedTime.getMinutes(),
+            0, 0
+        ).toISOString();
+        try {
+            const primaryOffering = laborer?.primaryOffering;
+            const serviceName = primaryOffering?.subcategory?.name || 'On-site service';
+            const price = primaryOffering?.price ?? laborer?.hourlyRate ?? 0;
+            const token = await AsyncStorage.getItem('userToken');
+            const res = await fetch(`${API_URL}/api/bookings`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+                },
+                body: JSON.stringify({
+                    laborerId,
+                    offeringId: primaryOffering?.id,
+                    service: serviceName,
+                    serviceDescription: appointmentMessage,
+                    scheduledAt: scheduled,
+                    address,
+                    latitude: selectedLocation.latitude,
+                    longitude: selectedLocation.longitude,
+                    estimatedDurationMin: 45,
+                    price
+                })
+            });
+            if (!res.ok) {
+                const txt = await res.text();
+                Alert.alert('Booking failed', txt || 'Please try again later.');
+                return;
+            }
+            const booking = await res.json();
+            console.log('Booking created', booking?._id, booking?.scheduledAt);
+            try { addUpcoming(booking); } catch {}
+            setShowSuccess(true);
+            router.replace('/(customer)/(tabs)/bookings');
+        } catch (e) {
+            Alert.alert('Error', 'Unable to create booking.');
+        }
     };
 
     const formatDate = (date: Date) => {
@@ -281,7 +357,7 @@ export default function BookingScreen() {
                     <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
                         <Ionicons name="chevron-back" size={24} color="#000" />
                     </TouchableOpacity>
-                    <Text style={styles.headerTitle}>Profile</Text>
+                    <Text style={styles.headerTitle}>Book Service</Text>
                     <View style={{ width: 24 }} />
                 </View>
 
@@ -300,12 +376,11 @@ export default function BookingScreen() {
                                     <Ionicons name="checkmark-circle" size={18} color="#00C853" />
                                 ) : null}
                             </View>
-                            <Text style={styles.rate}>{`₹${laborer.hourlyRate} /hour`}</Text>
+                            <Text style={styles.rate}>{`Rs${laborer.hourlyRate} `}</Text>
                             <View style={styles.ratingRow}>
                                 <Text style={styles.rating}>{laborer.rating}</Text>
                                 <Ionicons name="star" size={16} color="#FFD700" />
                             </View>
-                            <Text style={styles.distance}>{`${laborer.distance.toFixed(2)} km away`}</Text>
                         </View>
                     </View>
 

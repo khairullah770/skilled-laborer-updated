@@ -115,6 +115,32 @@ export const fetchUsers = async (role?: string, status?: string) => {
   return response.json();
 };
 
+// --- Customers APIs ---
+export const fetchCustomers = async () => {
+  const response = await fetch(`${API_URL}/customers`, {
+    headers: getAuthHeaders()
+  });
+  if (response.status === 401) {
+    localStorage.removeItem('token');
+    localStorage.removeItem('isAuthenticated');
+    window.location.href = '/login';
+    throw new Error('Session expired. Please login again.');
+  }
+  if (!response.ok) {
+    const text = await response.text().catch(() => '');
+    throw new Error(`Failed to fetch customers: ${response.status} ${response.statusText} - ${text}`);
+  }
+  return response.json();
+};
+
+export const fetchCustomerById = async (id: string) => {
+  const response = await fetch(`${API_URL}/customers/${id}`, {
+    headers: getAuthHeaders()
+  });
+  if (!response.ok) throw new Error('Failed to fetch customer details');
+  return response.json();
+};
+
 export const fetchUserById = async (id: string) => {
     const response = await fetch(`${API_URL}/users/${id}`, {
         headers: getAuthHeaders()

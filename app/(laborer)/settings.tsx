@@ -1,10 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Stack, useFocusEffect, useRouter } from 'expo-router';
-import React, { useCallback, useState } from 'react';
-import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Stack, useRouter } from 'expo-router';
+import React from 'react';
+import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { API_URL } from '../../constants/Api';
 import Colors from '../../constants/Colors';
 import { useTheme } from '../../context/ThemeContext';
 
@@ -12,60 +10,12 @@ export default function SettingsScreen() {
     const router = useRouter();
     const { theme, setTheme, colorScheme } = useTheme();
     const colors = Colors[colorScheme];
-    const [user, setUser] = useState<any>(null);
-    const [loading, setLoading] = useState(true);
-
-    useFocusEffect(
-        useCallback(() => {
-            fetchUserProfile();
-        }, [])
-    );
-
-    const fetchUserProfile = async () => {
-        try {
-            const userData = await AsyncStorage.getItem('userData');
-            const parsedUser = userData ? JSON.parse(userData) : null;
-            
-            if (parsedUser && parsedUser._id) {
-                 const response = await fetch(`${API_URL}/api/users?_id=${parsedUser._id}`);
-                 const data = await response.json();
-                 if (data && data.length > 0) {
-                     setUser(data[0]);
-                     // Update AsyncStorage to keep it fresh
-                     const updatedUserData = { ...parsedUser, ...data[0] };
-                     await AsyncStorage.setItem('userData', JSON.stringify(updatedUserData));
-                 }
-            }
-        } catch (error) {
-            console.error(error);
-        } finally {
-            setLoading(false);
-        }
-    };
 
     const themeOptions = [
         { id: 'light', title: 'Light Mode', icon: 'sunny-outline' },
         { id: 'dark', title: 'Dark Mode', icon: 'moon-outline' },
         { id: 'system', title: 'Use System Settings', icon: 'phone-portrait-outline' },
     ];
-
-    const getStatusColor = (status: string) => {
-        switch (status) {
-            case 'approved': return '#10B981';
-            case 'rejected': return '#EF4444';
-            case 'pending': return '#F59E0B';
-            default: return '#6B7280';
-        }
-    };
-
-    const getStatusText = (status: string) => {
-        switch (status) {
-            case 'approved': return 'Verified';
-            case 'rejected': return 'Rejected';
-            case 'pending': return 'Verification Pending';
-            default: return 'Unverified';
-        }
-    };
 
     return (
         <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
@@ -81,42 +31,6 @@ export default function SettingsScreen() {
             </View>
 
             <ScrollView contentContainerStyle={styles.scrollContent}>
-                {loading ? (
-                    <ActivityIndicator size="large" color={colors.tint} style={{ marginTop: 20 }} />
-                ) : (
-                    <View style={styles.section}>
-                        <Text style={styles.sectionTitle}>Account Status</Text>
-                        <View style={[styles.statusContainer, { backgroundColor: colorScheme === 'dark' ? '#1f1f1f' : '#F9FAFB' }]}>
-                            <View style={styles.statusHeader}>
-                                <View style={[styles.statusBadge, { backgroundColor: getStatusColor(user?.status) + '20' }]}>
-                                    <Text style={[styles.statusText, { color: getStatusColor(user?.status) }]}>
-                                        {getStatusText(user?.status)}
-                                    </Text>
-                                </View>
-                            </View>
-                            
-                            <Text style={[styles.statusDescription, { color: colors.text }]}>
-                                {user?.status === 'unverified' 
-                                    ? 'Complete your profile verification to start accepting jobs.' 
-                                    : user?.status === 'pending'
-                                    ? 'Your documents are under review. We will notify you once approved.'
-                                    : user?.status === 'approved'
-                                    ? 'Your account is verified. You can now accept jobs.'
-                                    : 'Your verification was rejected. Please contact support.'}
-                            </Text>
-
-                            {user?.status === 'unverified' && (
-                                <TouchableOpacity 
-                                    style={[styles.verifyButton, { backgroundColor: colors.tint }]}
-                                    onPress={() => router.push('/(laborer)/verification-details')}
-                                >
-                                    <Text style={styles.verifyButtonText}>Submit for Verification</Text>
-                                </TouchableOpacity>
-                            )}
-                        </View>
-                    </View>
-                )}
-
                 <View style={styles.section}>
                     <Text style={styles.sectionTitle}>Appearance</Text>
                     <View style={[styles.optionsContainer, { backgroundColor: colorScheme === 'dark' ? '#1f1f1f' : '#F9FAFB' }]}>
@@ -213,7 +127,6 @@ const styles = StyleSheet.create({
         fontSize: 18,
         fontWeight: 'bold',
         color: '#1F41BB',
-        marginTop: 35,
     },
     scrollContent: {
         padding: 20,

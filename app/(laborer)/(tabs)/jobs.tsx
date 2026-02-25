@@ -1,7 +1,9 @@
-import { useRouter } from 'expo-router';
-import React, { useState } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useFocusEffect, useRouter } from 'expo-router';
+import React, { useCallback, useState } from 'react';
 import { FlatList, Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { API_URL } from '../../../constants/Api';
 
 // Dummy data types
 interface Job {
@@ -15,44 +17,37 @@ interface Job {
   image: string;
 }
 
-const UPCOMING_JOBS: Job[] = [
-  {
-    id: '1',
-    customerName: 'Khairullah khaliq',
-    serviceType: 'Wiring and Rewiring',
-    date: '10 Dec, Tuesday',
-    time: '6:30 PM',
-    address: 'Khayban e sir syed',
-    status: 'accepted', // or upcoming
-    image: 'https://randomuser.me/api/portraits/men/32.jpg',
-  },
-  {
-    id: '2',
-    customerName: 'John Doe',
-    serviceType: 'Pipe Fitting',
-    date: '12 Dec, Thursday',
-    time: '2:00 PM',
-    address: 'Gulshan e Iqbal',
-    status: 'upcoming',
-    image: 'https://randomuser.me/api/portraits/men/45.jpg',
-  },
-];
-
-const COMPLETED_JOBS: Job[] = [
-  {
-    id: '3',
-    customerName: 'Jane Smith',
-    serviceType: 'Furniture Assembly',
-    date: '05 Dec, Sunday',
-    time: '10:00 AM',
-    address: 'DHA Phase 6',
-    status: 'completed',
-    image: 'https://randomuser.me/api/portraits/women/44.jpg',
-  },
-];
+const UPCOMING_JOBS: Job[] = [];
+const COMPLETED_JOBS: Job[] = [];
 
 export default function JobsScreen() {
   const [activeTab, setActiveTab] = useState<'upcoming' | 'completed'>('upcoming');
+  const [upcoming, setUpcoming] = useState<Job[]>([]);
+  const [completed, setCompleted] = useState<Job[]>([]);
+  const fetchJobs = useCallback(async () => {
+    try {
+      const token = await AsyncStorage.getItem('userToken');
+      const res = await fetch(`${API_URL}/api/bookings/laborer`, {
+        headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const mapJob = (b: any): Job => ({
+          id: b._id,
+          customerName: b.customer?.name || 'Customer',
+          serviceType: b.service,
+          date: new Date(b.scheduledAt).toLocaleDateString(),
+          time: new Date(b.scheduledAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          address: b.location?.address || '',
+          status: (b.status?.toLowerCase().replace(' ', '_') as any) || 'upcoming',
+          image: b.customer?.profileImage ? `${API_URL}${b.customer.profileImage}` : 'https://cdn.pixabay.com/photo/2015/10/05/22/37/blank-profile-picture-973460_1280.png'
+        });
+        setUpcoming((data.upcoming || []).map(mapJob));
+        setCompleted((data.completed || []).map(mapJob));
+      }
+    } catch {}
+  }, []);
+  useFocusEffect(useCallback(() => { fetchJobs(); }, [fetchJobs]));
   const router = useRouter();
 
   const renderJobItem = ({ item }: { item: Job }) => (
@@ -68,7 +63,7 @@ export default function JobsScreen() {
     </View>
   );
 
-  const data = activeTab === 'upcoming' ? UPCOMING_JOBS : COMPLETED_JOBS;
+  const data = activeTab === 'upcoming' ? upcoming : completed;
 
   return (
     <SafeAreaView style={styles.container}>
@@ -96,7 +91,7 @@ export default function JobsScreen() {
           activeTab === 'completed' ? (
             <View style={styles.totalContainer}>
               <Text style={styles.totalText}>
-                Total Jobs Completed: <Text style={styles.totalCount}>{COMPLETED_JOBS.length}</Text>
+                Total Jobs Completed: <Text style={styles.totalCount}>{completed.length}</Text>
               </Text>
             </View>
           ) : null
@@ -141,7 +136,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#E5E7EB',
     backgroundColor: '#fff',
-    marginTop: 40,
+    marginTop: 10,
     marginHorizontal: 20,
   },
   tab: {
@@ -158,13 +153,16 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#6B7280',
     fontWeight: '500',
+    paddingHorizontal: 4, // Prevent clipping
   },
   activeTabText: {
     color: '#1F41BB',
     fontWeight: 'bold',
   },
   listContent: {
-    padding: 20,
+    paddingHorizontal: 20,
+    paddingBottom: 20,
+    paddingTop: 10,
   },
   jobCard: {
     flexDirection: 'row',

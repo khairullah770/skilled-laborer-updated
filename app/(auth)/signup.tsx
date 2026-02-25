@@ -1,10 +1,11 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import React, { useState } from 'react';
-import { Image, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { Alert, Image, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Button from '../../components/Button';
 import Input from '../../components/Input';
+import { API_URL } from '../../constants/Api';
 
 export default function SignupScreen() {
     const router = useRouter();
@@ -12,22 +13,140 @@ export default function SignupScreen() {
         firstName: '',
         lastName: '',
         email: '',
+        phone: '',
         address: '',
         password: '',
         confirmPassword: '',
     });
     const [acceptTerms, setAcceptTerms] = useState(false);
+    const [errors, setErrors] = useState<any>({});
+    const [loading, setLoading] = useState(false);
+    const [isValid, setIsValid] = useState(false);
+    const [showPassword, setShowPassword] = useState(false);
+    const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
-    const handleSignup = () => {
-        // Validation logic can go here
-        router.push({
-            pathname: '/(auth)/verification',
-            params: {
-                email: form.email,
-                target: '/(customer)/(tabs)/home'
-            }
-        });
+    const formatPkPhone = (digitsOnly: string) => {
+        const d = digitsOnly.replace(/\D/g, '').slice(0, 10);
+        const partA = d.slice(0, 3);
+        const partB = d.slice(3, 10);
+        return [partA, partB].filter(Boolean).join(partB ? ' ' : '');
     };
+
+    const phoneDisplayToBackend = (display: string) => {
+        const d = display.replace(/\D/g, '');
+        return d.length ? `+92${d}` : '';
+    };
+
+    const validate = () => {
+        const e: any = {};
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        const phoneDisplayRegex = /^3\d{2}\s\d{7}$/;
+        if (!form.firstName.trim()) e.firstName = 'First name is required.';
+        if (!form.lastName.trim()) e.lastName = 'Last name is required.';
+        if (!form.email.trim()) e.email = 'Email is required';
+        else if (!emailRegex.test(form.email.trim())) e.email = 'Please enter a valid email (e.g., user@example.com)';
+        if (!form.phone.trim()) e.phone = 'Phone is required';
+        else if (!phoneDisplayRegex.test(form.phone.trim())) e.phone = 'Phone must match +92 3XX XXXXXXX';
+        if (!form.password) e.password = 'Password is required';
+        if (form.password !== form.confirmPassword) e.confirmPassword = 'Passwords do not match';
+        if (!acceptTerms) e.terms = 'Please accept terms and policy';
+        setErrors(e);
+        return Object.keys(e).length === 0;
+    };
+
+    const recomputeValid = () => {
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        const phoneDisplayRegex = /^3\d{2}\s\d{7}$/;
+        const ok =
+            !!form.firstName.trim() &&
+            !!form.lastName.trim() &&
+            !!form.email.trim() &&
+            emailRegex.test(form.email.trim()) &&
+            !!form.phone.trim() &&
+            phoneDisplayRegex.test(form.phone.trim()) &&
+            !!form.password &&
+            form.password === form.confirmPassword &&
+            acceptTerms;
+        setIsValid(ok);
+    };
+
+    const onChangeFirst = (t: string) => {
+        const v = t;
+        setForm(prev => ({ ...prev, firstName: v }));
+        setErrors((prev: any) => ({ ...prev, firstName: v.trim() ? '' : 'First name is required.' }));
+        recomputeValid();
+    };
+    const onChangeLast = (t: string) => {
+        const v = t;
+        setForm(prev => ({ ...prev, lastName: v }));
+        setErrors((prev: any) => ({ ...prev, lastName: v.trim() ? '' : 'Last name is required.' }));
+        recomputeValid();
+    };
+    const onChangeEmail = (t: string) => {
+        const v = t;
+        setForm(prev => ({ ...prev, email: v }));
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        setErrors((prev: any) => ({ ...prev, email: v.trim() && emailRegex.test(v.trim()) ? '' : 'Please enter a valid email (e.g., user@example.com)' }));
+        recomputeValid();
+    };
+    const onChangePhone = (t: string) => {
+        const formatted = formatPkPhone(t);
+        setForm(prev => ({ ...prev, phone: formatted }));
+        const phoneDisplayRegex = /^3\d{2}\s\d{7}$/;
+        setErrors((prev: any) => ({ ...prev, phone: formatted && phoneDisplayRegex.test(formatted) ? '' : 'Phone must match +92 3XX XXXXXXX' }));
+        recomputeValid();
+    };
+    const onChangePassword = (t: string) => {
+        setForm(prev => ({ ...prev, password: t }));
+        setErrors((prev: any) => ({ ...prev, password: t ? '' : 'Password is required', confirmPassword: prev.confirmPassword && prev.confirmPassword !== t ? 'Passwords do not match' : '' }));
+        recomputeValid();
+    };
+    const onChangeConfirmPassword = (t: string) => {
+        setForm(prev => ({ ...prev, confirmPassword: t }));
+        setErrors((prev: any) => ({ ...prev, confirmPassword: t === form.password ? '' : 'Passwords do not match' }));
+        recomputeValid();
+    };
+
+    const handleSignup = async () => {
+        if (!validate()) return;
+        try {
+            setLoading(true);
+            const res = await fetch(`${API_URL}/api/customers`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    firstName: form.firstName.trim(),
+                    lastName: form.lastName.trim(),
+                    email: form.email.trim(),
+                    phone: phoneDisplayToBackend(form.phone),
+                    password: form.password,
+                    confirmPassword: form.confirmPassword,
+                })
+            });
+            const data = await res.json();
+            if (!res.ok) {
+                setErrors({ server: data?.message || 'Signup failed' });
+                return;
+            }
+            setErrors({});
+            Alert.alert('Success', 'Account created successfully. Please log in.', [
+                {
+                    text: 'OK',
+                    onPress: () => {
+                        router.replace({ pathname: '/(auth)/login', params: { role: 'customer', prefillEmail: form.email.trim() } });
+                    }
+                }
+            ]);
+        } catch (err: any) {
+            setErrors({ server: 'Network error. Please try again.' });
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    useEffect(() => {
+        recomputeValid();
+    }, [form, acceptTerms]);
 
     const handleLogin = () => {
         router.replace('/(auth)/login');
@@ -46,67 +165,92 @@ export default function SignupScreen() {
                         <Text style={styles.title}>SIGN UP HERE</Text>
                     </View>
 
-                    <Text style={styles.continueText}>CONTINUE WITH</Text>
-                    <View style={styles.socialRow}>
-                        <TouchableOpacity style={styles.socialIcon}>
-                            <Ionicons name="logo-google" size={28} color="#EA4335" />
-                        </TouchableOpacity>
-                        <TouchableOpacity style={styles.socialIcon}>
-                            <Ionicons name="logo-facebook" size={28} color="#1877F2" />
-                        </TouchableOpacity>
-                        <TouchableOpacity style={styles.socialIcon}>
-                            <Ionicons name="mail" size={28} color="#4285F4" />
-                        </TouchableOpacity>
-                    </View>
+        
 
                     <View style={styles.form}>
                         <View style={styles.row}>
                             <Input
                                 placeholder="First Name"
                                 value={form.firstName}
-                                onChangeText={(t) => setForm({ ...form, firstName: t })}
+                                onChangeText={onChangeFirst}
                                 containerStyle={styles.halfInput}
                                 inputContainerStyle={styles.roundedInput}
                             />
+                            {!!errors.firstName && <Text style={styles.errorText}>{errors.firstName}</Text>}
                             <Input
                                 placeholder="Last Name"
                                 value={form.lastName}
-                                onChangeText={(t) => setForm({ ...form, lastName: t })}
+                                onChangeText={onChangeLast}
                                 containerStyle={styles.halfInput}
                                 inputContainerStyle={styles.roundedInput}
                             />
+                            {!!errors.lastName && <Text style={styles.errorText}>{errors.lastName}</Text>}
                         </View>
 
                         <Input
                             placeholder="Email"
                             keyboardType="email-address"
                             value={form.email}
-                            onChangeText={(t) => setForm({ ...form, email: t })}
+                            onChangeText={onChangeEmail}
                             inputContainerStyle={styles.roundedInput}
                         />
+                        {!!errors.email && <Text style={styles.errorText}>{errors.email}</Text>}
 
                         <Input
-                            placeholder="Address"
-                            value={form.address}
-                            onChangeText={(t) => setForm({ ...form, address: t })}
+                            placeholder="3XX XXXXXXX"
+                            keyboardType="number-pad"
+                            value={form.phone}
+                            onChangeText={onChangePhone}
                             inputContainerStyle={styles.roundedInput}
+                            prefix="+92"
                         />
+                        {!!errors.phone && <Text style={styles.errorText}>{errors.phone}</Text>}
 
                         <Input
                             placeholder="Password"
-                            secureTextEntry
+                            secureTextEntry={!showPassword}
                             value={form.password}
-                            onChangeText={(t) => setForm({ ...form, password: t })}
+                            onChangeText={onChangePassword}
                             inputContainerStyle={styles.roundedInput}
+                            autoCapitalize="none"
+                            autoCorrect={false}
+                            textContentType="password"
+                            suffix={
+                                <TouchableOpacity
+                                    onPress={() => setShowPassword(v => !v)}
+                                    accessibilityRole="button"
+                                    accessibilityLabel={showPassword ? 'Hide password' : 'Show password'}
+                                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                                    style={{ paddingHorizontal: 12 }}
+                                >
+                                    <Ionicons name={showPassword ? 'eye-off' : 'eye'} size={20} color="#6B7280" />
+                                </TouchableOpacity>
+                            }
                         />
+                        {!!errors.password && <Text style={styles.errorText}>{errors.password}</Text>}
 
                         <Input
                             placeholder="Confirm Password"
-                            secureTextEntry
+                            secureTextEntry={!showConfirmPassword}
                             value={form.confirmPassword}
-                            onChangeText={(t) => setForm({ ...form, confirmPassword: t })}
+                            onChangeText={onChangeConfirmPassword}
                             inputContainerStyle={styles.roundedInput}
+                            autoCapitalize="none"
+                            autoCorrect={false}
+                            textContentType="password"
+                            suffix={
+                                <TouchableOpacity
+                                    onPress={() => setShowConfirmPassword(v => !v)}
+                                    accessibilityRole="button"
+                                    accessibilityLabel={showConfirmPassword ? 'Hide confirm password' : 'Show confirm password'}
+                                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                                    style={{ paddingHorizontal: 12 }}
+                                >
+                                    <Ionicons name={showConfirmPassword ? 'eye-off' : 'eye'} size={20} color="#6B7280" />
+                                </TouchableOpacity>
+                            }
                         />
+                        {!!errors.confirmPassword && <Text style={styles.errorText}>{errors.confirmPassword}</Text>}
 
                         <TouchableOpacity
                             style={styles.checkboxContainer}
@@ -117,12 +261,16 @@ export default function SignupScreen() {
                             </View>
                             <Text style={styles.checkboxLabel}>Accept terms and policy</Text>
                         </TouchableOpacity>
+                        {!!errors.terms && <Text style={styles.errorText}>{errors.terms}</Text>}
+                        {!!errors.server && <Text style={styles.serverErrorText}>{errors.server}</Text>}
 
                         <Button
                             text="Sign Up"
                             onPress={handleSignup}
                             style={styles.signupButton}
                             textStyle={styles.signupButtonText}
+                            loading={loading}
+                            disabled={!isValid}
                         />
 
                         <View style={styles.footer}>
@@ -161,7 +309,7 @@ const styles = StyleSheet.create({
         fontSize: 22,
         fontWeight: '700',
         color: '#333',
-        marginTop: 10,
+        marginTop: 40,
         alignSelf: 'center', // Keep title centered if that's preferred, or let it follow header
     },
     continueText: {
@@ -231,6 +379,25 @@ const styles = StyleSheet.create({
     signupButtonText: {
         fontSize: 18,
         fontWeight: '700',
+    },
+    errorText: {
+        color: '#DC2626',
+        fontSize: 12,
+        marginTop: 6,
+        marginLeft: 10,
+    },
+    serverErrorText: {
+        color: '#B91C1C',
+        fontSize: 13,
+        marginTop: 8,
+        textAlign: 'center',
+        fontWeight: '600',
+    },
+    helperText: {
+        color: '#6B7280',
+        fontSize: 12,
+        marginTop: 6,
+        marginLeft: 10,
     },
     footer: {
         flexDirection: 'column',

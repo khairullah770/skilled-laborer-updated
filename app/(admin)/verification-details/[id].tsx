@@ -36,6 +36,25 @@ export default function VerificationDetails() {
             headers: { Authorization: `Bearer ${token}` }
         });
         const data = await response.json();
+        
+        // If pending, use submittedData from history for display
+        if (data.status === 'pending' && data.verificationHistory) {
+            const lastPending = [...data.verificationHistory]
+                .reverse()
+                .find((h: any) => h.status === 'pending' && h.submittedData);
+            
+            if (lastPending && lastPending.submittedData) {
+                // Merge submitted data into user object for display
+                const displayUser = {
+                    ...data,
+                    ...lastPending.submittedData,
+                    isPendingReview: true // Flag to show we are viewing submitted data
+                };
+                setUser(displayUser);
+                return;
+            }
+        }
+        
         setUser(data);
     } catch (error) {
         console.error(error);
@@ -127,6 +146,16 @@ export default function VerificationDetails() {
       </View>
 
       <ScrollView contentContainerStyle={styles.content}>
+        {/* Pending Review Notice */}
+        {user.isPendingReview && (
+            <View style={styles.reviewNotice}>
+                <Ionicons name="information-circle" size={20} color="#92400E" />
+                <Text style={styles.reviewNoticeText}>
+                    You are viewing details submitted for review. These will update the profile upon approval.
+                </Text>
+            </View>
+        )}
+
         {/* Profile Section */}
         <View style={styles.section}>
             <View style={styles.profileHeader}>
@@ -319,6 +348,24 @@ const styles = StyleSheet.create({
   rejectButton: { backgroundColor: '#EF4444' },
   approveButton: { backgroundColor: '#10B981' },
   actionButtonText: { color: '#FFF', fontWeight: 'bold', fontSize: 16 },
+  
+  reviewNotice: {
+    backgroundColor: '#FEF3C7',
+    padding: 12,
+    borderRadius: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+    borderWidth: 1,
+    borderBottomColor: '#F59E0B',
+  },
+  reviewNoticeText: {
+    marginLeft: 8,
+    fontSize: 13,
+    color: '#92400E',
+    flex: 1,
+    lineHeight: 18,
+  },
   
   // Modal Styles
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', padding: 20 },

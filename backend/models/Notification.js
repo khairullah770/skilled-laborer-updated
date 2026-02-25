@@ -9,7 +9,16 @@ const notificationSchema = mongoose.Schema(
     },
     type: {
       type: String,
-      enum: ['verification_submission', 'verification_approved', 'verification_rejected', 'booking_update', 'system'],
+      enum: [
+        'verification_submission',
+        'verification_approved',
+        'verification_rejected',
+        'verification_update',
+        'booking_update',
+        'job_request',
+        'rating_received',
+        'system'
+      ],
       required: true,
     },
     title: {
@@ -26,6 +35,9 @@ const notificationSchema = mongoose.Schema(
     isRead: {
       type: Boolean,
       default: false,
+    },
+    readAt: {
+      type: Date,
     },
   },
   {

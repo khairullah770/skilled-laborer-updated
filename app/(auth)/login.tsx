@@ -1,32 +1,144 @@
 import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import React, { useState } from 'react';
-import { Image, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { Alert, Image, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Button from '../../components/Button';
 import Input from '../../components/Input';
+import { API_URL } from '../../constants/Api';
 
-export default function LoginScreen() {
+export default function CustomerLoginScreen() {
     const router = useRouter();
-    const params = useLocalSearchParams<{ role?: string }>();
+    const params = useLocalSearchParams<{ role?: string; prefillEmail?: string }>();
 
-    const initialRole: 'customer' | 'laborer' =
-        params.role === 'laborer' ? 'laborer' : 'customer';
+    const [loginMethod, setLoginMethod] = useState<'email' | 'phone'>('email');
+    const [loading, setLoading] = useState(false);
 
-    // Role comes from previous screen; UI is designed for customer login style
-    const [selectedRole] = useState<'customer' | 'laborer'>(initialRole);
-
+    // Form State
     const [email, setEmail] = useState('');
+    const [phone, setPhone] = useState('');
     const [password, setPassword] = useState('');
 
-    const handleLogin = () => {
-        // Implement auth logic here
-        // Navigate based on selected role
-        if (selectedRole === 'customer') {
-            router.replace('/(customer)/(tabs)/home');
+    // Validation State
+    const [emailError, setEmailError] = useState('');
+    const [phoneError, setPhoneError] = useState('');
+    const [passwordError, setPasswordError] = useState('');
+
+    // Visibility State
+    const [showPassword, setShowPassword] = useState(false);
+
+    // Regex Patterns (match laborer login to keep parity)
+    const EMAIL_REGEX = /^[a-zA-Z0-9._%+-]+@gmail\.com$/;
+    
+    // Email Validation
+    const validateEmail = (text: string) => {
+        setEmail(text);
+        if (text.length > 0) {
+            if (!EMAIL_REGEX.test(text)) {
+                setEmailError('Email must be a valid @gmail.com address');
+            } else {
+                setEmailError('');
+            }
         } else {
-            // Laborer flow (placeholder route for now)
-            router.replace('/(laborer)');
+            setEmailError('');
+        }
+    };
+
+    useEffect(() => {
+        if (params?.prefillEmail && typeof params.prefillEmail === 'string') {
+            setLoginMethod('email');
+            setEmail(params.prefillEmail);
+        }
+    }, [params]);
+
+    // Phone Validation & Masking
+    const handlePhoneChange = (text: string) => {
+        const cleaned = text.replace(/\D/g, '');
+        const truncated = cleaned.slice(0, 10);
+        let formatted = truncated;
+        if (truncated.length > 3) {
+            formatted = `${truncated.slice(0, 3)} ${truncated.slice(3)}`;
+        }
+        setPhone(formatted);
+        if (truncated.length > 0 && truncated.length < 10) {
+            setPhoneError('Phone number must have 10 digits after +92');
+        } else if (truncated.length === 10) {
+            setPhoneError('');
+        } else {
+            setPhoneError('');
+        }
+    };
+
+    const handleLogin = async () => {
+        let isValid = true;
+
+        if (loginMethod === 'email') {
+            if (!email) {
+                setEmailError('Email is required');
+                isValid = false;
+            } else if (!EMAIL_REGEX.test(email)) {
+                setEmailError('Invalid email format');
+                isValid = false;
+            }
+        } else {
+            const rawPhone = phone.replace(/\s/g, '');
+            if (!phone) {
+                setPhoneError('Phone number is required');
+                isValid = false;
+            } else if (rawPhone.length !== 10) {
+                setPhoneError('Invalid phone number length');
+                isValid = false;
+            }
+        }
+
+        if (!password) {
+            setPasswordError('Password is required');
+            isValid = false;
+        } else {
+            setPasswordError('');
+        }
+
+        if (!isValid) return;
+
+        setLoading(true);
+        try {
+            const payload = {
+                password: password,
+                ...(loginMethod === 'email' 
+                    ? { email: email } 
+                    : { phone: `+92${phone.replace(/\s/g, '')}` })
+            };
+
+            const response = await fetch(`${API_URL}/api/customers/login`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+
+            const data = await response.json();
+
+            if (response.ok) {
+                await AsyncStorage.setItem('userToken', data.token);
+                await AsyncStorage.setItem('userData', JSON.stringify(data));
+
+                if (data.role === 'customer') {
+                    router.replace('/(customer)/(tabs)/home');
+                } else if (data.role === 'admin') {
+                    router.replace('/(admin)/dashboard');
+                } else if (data.role === 'laborer') {
+                    router.replace('/(laborer)/(tabs)/home');
+                } else {
+                    Alert.alert('Error', 'This account is not authorized');
+                }
+            } else {
+                Alert.alert('Error', data.message || 'Login failed');
+            }
+        } catch (error) {
+            Alert.alert('Error', 'Network error. Please try again.');
+            console.error(error);
+        } finally {
+            setLoading(false);
         }
     };
 
@@ -37,7 +149,7 @@ export default function LoginScreen() {
     return (
         <SafeAreaView style={styles.container}>
             <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
-                <ScrollView contentContainerStyle={styles.scrollContent}>
+                <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
                     <View style={styles.card}>
                         <View style={styles.logoSection}>
                             <Image
@@ -47,34 +159,78 @@ export default function LoginScreen() {
                             />
                         </View>
 
-                        <Text style={styles.continueText}>CONTINUE WITH</Text>
+                        <Text style={styles.welcomeText}>Customer login</Text>
 
-                        <View style={styles.socialRow}>
-                            <TouchableOpacity style={styles.socialButton}>
-                                <Ionicons name="logo-google" size={22} color="#DB4437" />
-                            </TouchableOpacity>
-                            <TouchableOpacity style={styles.socialButton}>
-                                <Ionicons name="logo-facebook" size={22} color="#1877F2" />
-                            </TouchableOpacity>
-
-                        </View>
 
                         <View style={styles.form}>
-                            <Input
-                                label="Email"
-                                placeholder="Enter your email"
-                                keyboardType="email-address"
-                                value={email}
-                                onChangeText={setEmail}
-                            />
+                            <View style={styles.methodToggleContainer}>
+                                <TouchableOpacity
+                                    style={[styles.methodToggleButton, loginMethod === 'email' && styles.methodToggleButtonActive]}
+                                    onPress={() => {
+                                        setLoginMethod('email');
+                                        setPhoneError('');
+                                        setEmailError('');
+                                    }}
+                                >
+                                    <Text style={[styles.methodToggleText, loginMethod === 'email' && styles.methodToggleTextActive]}>Email</Text>
+                                </TouchableOpacity>
+                                <TouchableOpacity
+                                    style={[styles.methodToggleButton, loginMethod === 'phone' && styles.methodToggleButtonActive]}
+                                    onPress={() => {
+                                        setLoginMethod('phone');
+                                        setEmailError('');
+                                        setPhoneError('');
+                                    }}
+                                >
+                                    <Text style={[styles.methodToggleText, loginMethod === 'phone' && styles.methodToggleTextActive]}>Phone</Text>
+                                </TouchableOpacity>
+                            </View>
 
-                            <Input
-                                label="Password"
-                                placeholder="Enter your password"
-                                secureTextEntry
-                                value={password}
-                                onChangeText={setPassword}
-                            />
+                            {loginMethod === 'email' ? (
+                                <View style={styles.inputWrapper}>
+                                    <Input
+                                        placeholder="Email (e.g., user@gmail.com)"
+                                        keyboardType="email-address"
+                                        value={email}
+                                        onChangeText={validateEmail}
+                                        inputContainerStyle={[styles.roundedInput, emailError ? styles.inputError : undefined].filter(Boolean) as any}
+                                    />
+                                    {emailError ? <Text style={styles.errorText}>{emailError}</Text> : null}
+                                </View>
+                            ) : (
+                                <View style={styles.inputWrapper}>
+                                    <Input
+                                        placeholder="3XX XXXXXXX"
+                                        keyboardType="phone-pad"
+                                        prefix="+92"
+                                        value={phone}
+                                        onChangeText={handlePhoneChange}
+                                        maxLength={11}
+                                        inputContainerStyle={[styles.roundedInput, phoneError ? styles.inputError : undefined].filter(Boolean) as any}
+                                    />
+                                    <Text style={styles.helperText}>Format: +92 3XX XXXXXXX</Text>
+                                    {phoneError ? <Text style={styles.errorText}>{phoneError}</Text> : null}
+                                </View>
+                            )}
+
+                            <View style={styles.inputWrapper}>
+                                <Input
+                                    placeholder="Password"
+                                    secureTextEntry={!showPassword}
+                                    value={password}
+                                    onChangeText={(text) => {
+                                        setPassword(text);
+                                        setPasswordError('');
+                                    }}
+                                    inputContainerStyle={[styles.roundedInput, passwordError ? styles.inputError : undefined].filter(Boolean) as any}
+                                    suffix={
+                                        <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
+                                            <Ionicons name={showPassword ? "eye-off" : "eye"} size={20} color="#6B7280" />
+                                        </TouchableOpacity>
+                                    }
+                                />
+                                {passwordError ? <Text style={styles.errorText}>{passwordError}</Text> : null}
+                            </View>
 
                             <TouchableOpacity style={styles.forgotPasswordContainer}>
                                 <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
@@ -86,6 +242,7 @@ export default function LoginScreen() {
                                 text="Login"
                                 onPress={handleLogin}
                                 style={styles.loginButton}
+                                loading={loading}
                             />
                         </View>
 
@@ -103,8 +260,6 @@ export default function LoginScreen() {
         </SafeAreaView>
     );
 }
-
-
 
 const styles = StyleSheet.create({
     container: {
@@ -127,32 +282,18 @@ const styles = StyleSheet.create({
     },
     logoSection: {
         alignItems: 'center',
-        marginBottom: 28,
+        marginBottom: 20,
     },
     logo: {
-        width: 210,
-        height: 210,
+        width: 180,
+        height: 180,
     },
-    appTitle: {
+    welcomeText: {
         fontSize: 24,
         fontWeight: '700',
-        letterSpacing: 1,
-        color: '#111827',
-        textAlign: 'center',
-    },
-    appSubtitle: {
-        fontSize: 12,
-        fontWeight: '600',
         color: '#1F41BB',
         textAlign: 'center',
-        marginBottom: 24,
-    },
-    continueText: {
-        fontSize: 14,
-        fontWeight: '600',
-        color: '#666',
-        textAlign: 'center',
-        marginBottom: 10,
+        marginBottom: 38,
     },
     socialRow: {
         flexDirection: 'row',
@@ -201,5 +342,63 @@ const styles = StyleSheet.create({
         fontSize: 14,
         color: '#1F41BB',
         fontWeight: '600',
+    },
+    methodToggleContainer: {
+        flexDirection: 'row',
+        backgroundColor: '#F3F4F6',
+        borderRadius: 30,
+        padding: 4,
+        marginBottom: 20,
+    },
+    methodToggleButton: {
+        flex: 1,
+        paddingVertical: 12,
+        alignItems: 'center',
+        borderRadius: 25,
+    },
+    methodToggleButtonActive: {
+        backgroundColor: '#FFFFFF',
+        shadowColor: '#000',
+        shadowOffset: {
+            width: 0,
+            height: 2,
+        },
+        shadowOpacity: 0.1,
+        shadowRadius: 3.84,
+        elevation: 5,
+    },
+    methodToggleText: {
+        fontSize: 16,
+        fontWeight: '600',
+        color: '#6B7280',
+    },
+    methodToggleTextActive: {
+        color: '#1F41BB',
+        fontWeight: '700',
+    },
+    inputWrapper: {
+        marginBottom: 15,
+    },
+    roundedInput: {
+        borderRadius: 25,
+        borderWidth: 1,
+        borderColor: '#E5E7EB',
+        height: 50,
+        paddingHorizontal: 20,
+    },
+    inputError: {
+        borderColor: '#EF4444',
+    },
+    errorText: {
+        color: '#EF4444',
+        fontSize: 12,
+        marginLeft: 10,
+        marginTop: 4,
+    },
+    helperText: {
+        color: '#6B7280',
+        fontSize: 12,
+        marginLeft: 10,
+        marginTop: 4,
     },
 });

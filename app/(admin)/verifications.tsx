@@ -31,38 +31,58 @@ export default function AdminVerifications() {
     }
   };
 
-  const renderItem = ({ item }: any) => (
-    <View style={styles.card}>
-      <View style={styles.cardHeader}>
-        <View style={styles.userInfo}>
-            <View style={styles.avatarContainer}>
-                {item.profileImage ? (
-                    <Image source={{ uri: `${API_URL}${item.profileImage}` }} style={styles.avatar} />
-                ) : (
-                    <Ionicons name="person-circle-outline" size={50} color="#ccc" />
-                )}
+  const renderItem = ({ item }: any) => {
+    // Determine which data to display
+    let displayName = item.name;
+    let displayEmail = item.email;
+    let displayImage = item.profileImage;
+
+    // If pending, try to find the submitted data for display in the list
+    if (item.status === 'pending' && item.verificationHistory) {
+        const lastPending = [...item.verificationHistory]
+            .reverse()
+            .find((h: any) => h.status === 'pending' && h.submittedData);
+        
+        if (lastPending && lastPending.submittedData) {
+            displayName = lastPending.submittedData.name || displayName;
+            displayEmail = lastPending.submittedData.email || displayEmail;
+            displayImage = lastPending.submittedData.profileImage || displayImage;
+        }
+    }
+
+    return (
+        <View style={styles.card}>
+          <View style={styles.cardHeader}>
+            <View style={styles.userInfo}>
+                <View style={styles.avatarContainer}>
+                    {displayImage ? (
+                        <Image source={{ uri: `${API_URL}${displayImage}` }} style={styles.avatar} />
+                    ) : (
+                        <Ionicons name="person-circle-outline" size={50} color="#ccc" />
+                    )}
+                </View>
+                <View>
+                    <Text style={styles.userName}>{displayName}</Text>
+                    <Text style={styles.userEmail}>{displayEmail}</Text>
+                    <Text style={styles.userDate}>Submitted: {new Date(item.updatedAt).toLocaleDateString()}</Text>
+                </View>
             </View>
-            <View>
-                <Text style={styles.userName}>{item.name}</Text>
-                <Text style={styles.userEmail}>{item.email}</Text>
-                <Text style={styles.userDate}>Submitted: {new Date(item.updatedAt).toLocaleDateString()}</Text>
+          </View>
+          <View style={styles.cardFooter}>
+            <View style={styles.badge}>
+                <Text style={styles.badgeText}>Pending Review</Text>
             </View>
+            <TouchableOpacity 
+                style={styles.detailsButton}
+                onPress={() => router.push(`/(admin)/verification-details/${item._id}`)}
+            >
+                <Text style={styles.detailsButtonText}>View Details</Text>
+                <Ionicons name="arrow-forward" size={16} color="#FFF" />
+            </TouchableOpacity>
+          </View>
         </View>
-      </View>
-      <View style={styles.cardFooter}>
-        <View style={styles.badge}>
-            <Text style={styles.badgeText}>Pending Review</Text>
-        </View>
-        <TouchableOpacity 
-            style={styles.detailsButton}
-            onPress={() => router.push(`/(admin)/verification-details/${item._id}`)}
-        >
-            <Text style={styles.detailsButtonText}>View Details</Text>
-            <Ionicons name="arrow-forward" size={16} color="#FFF" />
-        </TouchableOpacity>
-      </View>
-    </View>
-  );
+    );
+  };
 
   return (
     <SafeAreaView style={styles.container}>

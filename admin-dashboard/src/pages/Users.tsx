@@ -1,6 +1,6 @@
-import { Briefcase, Check, Clock, Eye, Phone, Search, ShieldAlert, ShieldCheck, Star, X, XCircle } from 'lucide-react';
+import { Briefcase, Check, Clock, Eye, Search, ShieldAlert, ShieldCheck, Star, X, XCircle } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { BASE_URL, fetchUsers, updateUserStatus } from '../api';
+import { BASE_URL, fetchCustomers, fetchUsers, updateUserStatus } from '../api';
 import UserDetailsModal from '../components/UserDetailsModal';
 
 interface User {
@@ -37,7 +37,7 @@ const Users = () => {
       setLoading(true);
       const [laborersData, customersData] = await Promise.all([
         fetchUsers('laborer'),
-        fetchUsers('customer')
+        fetchCustomers()
       ]);
       setLaborers(laborersData);
       setCustomers(customersData);
@@ -198,10 +198,6 @@ const Users = () => {
                         <Briefcase className="h-4 w-4 mr-2 text-slate-400" />
                         {laborer.email}
                       </div>
-                      <div className="flex items-center text-sm text-slate-600">
-                        <Phone className="h-4 w-4 mr-2 text-slate-400" />
-                        {laborer.phone || 'No phone'}
-                      </div>
                     </div>
                   </div>
                   <div className="mt-6 pt-4 border-t border-slate-50 space-y-3">
@@ -356,13 +352,15 @@ const Users = () => {
                       {new Date(user.createdAt).toLocaleDateString()}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                      <button 
-                        onClick={() => handleViewDetails(user._id)}
-                        className="text-indigo-600 hover:text-indigo-900 bg-indigo-50 hover:bg-indigo-100 px-3 py-1.5 rounded-lg transition-colors"
-                      >
-                        <Eye className="w-4 h-4 mr-1.5 inline-block" />
-                        View Details
-                      </button>
+                      {activeTab === 'laborers' && (
+                        <button 
+                          onClick={() => handleViewDetails(user._id)}
+                          className="text-indigo-600 hover:text-indigo-900 bg-indigo-50 hover:bg-indigo-100 px-3 py-1.5 rounded-lg transition-colors"
+                        >
+                          <Eye className="w-4 h-4 mr-1.5 inline-block" />
+                          View Details
+                        </button>
+                      )}
                     </td>
                   </tr>
                 ))

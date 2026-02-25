@@ -1,6 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as ImagePicker from 'expo-image-picker';
 import { Stack, useFocusEffect, useRouter } from 'expo-router';
 import React, { useCallback, useState } from 'react';
 import { ActivityIndicator, Alert, Image, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
@@ -25,7 +24,6 @@ export default function ProfileScreen() {
     const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
     const [passwordLoading, setPasswordLoading] = useState(false);
-    const [uploadingImage, setUploadingImage] = useState(false);
 
     useFocusEffect(
         useCallback(() => {
@@ -66,114 +64,61 @@ export default function ProfileScreen() {
         }
     };
 
-    const pickImage = async () => {
-        const result = await ImagePicker.launchImageLibraryAsync({
-            mediaTypes: ImagePicker.MediaTypeOptions.Images,
-            allowsEditing: true,
-            aspect: [1, 1],
-            quality: 0.8,
-        });
+    const handleSavePassword = async () => {
+        const trimmedCurrent = currentPassword.trim();
+        const trimmedNew = newPassword.trim();
+        const trimmedConfirm = confirmPassword.trim();
 
-        if (!result.canceled) {
-            uploadProfileImage(result.assets[0].uri);
+        if (!trimmedCurrent || !trimmedNew || !trimmedConfirm) {
+            Alert.alert("Error", "Please fill in all password fields.");
+            return;
         }
-    };
+        if (trimmedNew !== trimmedConfirm) {
+            Alert.alert("Error", "New passwords do not match.");
+            return;
+        }
+        if (trimmedNew.length < 6) {
+            Alert.alert("Error", "New password must be at least 6 characters long.");
+            return;
+        }
 
-    const uploadProfileImage = async (uri: string) => {
-        if (!user || !user._id) return;
-
-        setUploadingImage(true);
+        setPasswordLoading(true);
         try {
             const userToken = await AsyncStorage.getItem('userToken');
-            const formData = new FormData();
-            
-            const filename = uri.split('/').pop();
-            const match = /\.(\w+)$/.exec(filename || '');
-            const type = match ? `image/${match[1]}` : `image/jpeg`;
-            
-            formData.append('profileImage', {
-                uri: uri,
-                name: filename || 'profile.jpg',
-                type,
-            } as any);
-
-            // We use the verification endpoint or a specific profile upload endpoint
-            // Assuming we can use the verification endpoint or a generic update endpoint
-            // For now, let's use the verification endpoint structure or creating a new one?
-            // Actually, the verification endpoint (PUT /api/users/:id/verification) handles file uploads.
-            // But usually there's a simpler profile update. Let's check userController.js later if needed.
-            // For now, we will try to use the verification endpoint but it might change status to pending.
-            // BETTER: Use a new specific endpoint or the same one but handle it carefully.
-            // Let's assume we can use the same endpoint for now, or just try to update.
-            // Actually, let's check if there is a generic update endpoint.
-            // userController.js has registerUser, loginUser, submitVerificationDetails, getUsers, getUserById, updateUserStatus.
-            // It lacks a generic "updateProfile" endpoint! 
-            // However, submitVerificationDetails does: user.profileImage = ...
-            // But it sets status to 'pending'. We don't want that for just a profile pic change.
-            // I will use submitVerificationDetails for now but be aware of the side effect, 
-            // OR I should ideally create a new endpoint. 
-            // Given the constraints, I will use the verification endpoint but user explicitly asked to "Enable uploading...".
-            // If I change status to pending, it locks the account. That's bad.
-            // I should probably fix the backend to allow profile pic update without status change, or use a different logic.
-            // For this turn, I'll implement the UI and the call, and if it causes issues, I'll fix the backend.
-            // Wait, I can add a flag or check if only profile image is being sent?
-            // Let's stick to the UI implementation first.
-            
-            const response = await fetch(`${API_URL}/api/users/${user._id}/verification`, {
+            const response = await fetch(`${API_URL}/api/users/change-password`, {
                 method: 'PUT',
                 headers: {
-                    'Accept': 'application/json',
+                    'Content-Type': 'application/json',
                     'Authorization': `Bearer ${userToken}`
                 },
-                body: formData,
+                body: JSON.stringify({
+                    currentPassword: trimmedCurrent,
+                    newPassword: trimmedNew
+                })
             });
 
             const data = await response.json();
 
             if (response.ok) {
-                // Update local user
-                const updatedUser = { ...user, profileImage: data.profileImage };
-                setUser(updatedUser);
-                await AsyncStorage.setItem('userData', JSON.stringify(updatedUser));
-                Alert.alert('Success', 'Profile picture updated');
+                Alert.alert(
+                    "Success",
+                    "Password updated successfully.",
+                    [{ text: "OK", onPress: () => {
+                        setCurrentPassword('');
+                        setNewPassword('');
+                        setConfirmPassword('');
+                        setActiveTab('personal');
+                    }}]
+                );
             } else {
-                Alert.alert('Error', data.message || 'Failed to upload image');
+                Alert.alert("Error", data.message || "Failed to update password.");
             }
-
         } catch (error) {
-            console.error('Upload error:', error);
-            Alert.alert('Error', 'Network error while uploading');
+            console.error('Password update error:', error);
+            Alert.alert("Error", "Network error. Please try again later.");
         } finally {
-            setUploadingImage(false);
-        }
-    };
-
-    const handleSavePassword = async () => {
-        if (!currentPassword || !newPassword || !confirmPassword) {
-            Alert.alert("Error", "Please fill in all password fields.");
-            return;
-        }
-        if (newPassword !== confirmPassword) {
-            Alert.alert("Error", "New passwords do not match.");
-            return;
-        }
-
-        setPasswordLoading(true);
-        // Simulate API call or implement if backend supports it
-        // userController doesn't seem to have changePassword. 
-        // We'll leave it as simulated for now as per previous code, or just show alert.
-        setTimeout(() => {
             setPasswordLoading(false);
-            Alert.alert(
-                "Success",
-                "Password updated successfully.",
-                [{ text: "OK", onPress: () => {
-                    setCurrentPassword('');
-                    setNewPassword('');
-                    setConfirmPassword('');
-                }}]
-            );
-        }, 1500);
+        }
     };
 
     if (loading) {
@@ -215,20 +160,6 @@ export default function ProfileScreen() {
                                     style={styles.avatar}
                                 />
                             )}
-                            <TouchableOpacity style={styles.cameraBadge} onPress={pickImage} disabled={uploadingImage}>
-                                {uploadingImage ? (
-                                    <ActivityIndicator size="small" color="#FFF" />
-                                ) : (
-                                    <Ionicons name="camera" size={20} color="#FFF" />
-                                )}
-                            </TouchableOpacity>
-                        </View>
-                        
-                        {/* Rating Display */}
-                        <View style={styles.ratingContainer}>
-                            <Text style={styles.ratingText}>{user?.rating !== undefined ? Number(user.rating).toFixed(1) : '0.0'}</Text>
-                            <Ionicons name="star" size={18} color="#F59E0B" style={{ marginLeft: 4 }} />
-                            <Text style={styles.ratingLabel}>Rating</Text>
                         </View>
                     </View>
 
@@ -288,10 +219,12 @@ export default function ProfileScreen() {
                                 style={{ textAlignVertical: 'top' }}
                             />
                              <Input
-                                label="Category / Skill"
-                                value={user?.category?.name || (typeof user?.category === 'string' ? user.category : '')}
+                                label="Categories / Skills"
+                                value={user?.categories && user.categories.length > 0
+                                    ? user.categories.map((cat: any) => typeof cat === 'object' ? cat.name : cat).join(', ')
+                                    : (user?.category?.name || (typeof user?.category === 'string' ? user.category : ''))}
                                 editable={false}
-                                placeholder="Category"
+                                placeholder="Categories"
                             />
                             <Input
                                 label="Years of Experience"
@@ -430,36 +363,6 @@ const styles = StyleSheet.create({
         borderRadius: 50,
         borderWidth: 3,
         borderColor: '#F0F4FF',
-    },
-    cameraBadge: {
-        position: 'absolute',
-        bottom: 0,
-        right: 0,
-        backgroundColor: '#1F41BB',
-        padding: 8,
-        borderRadius: 20,
-        borderWidth: 3,
-        borderColor: '#FFFFFF',
-    },
-    ratingContainer: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: '#FFFBEB',
-        paddingHorizontal: 12,
-        paddingVertical: 6,
-        borderRadius: 20,
-        marginTop: 5,
-    },
-    ratingText: {
-        fontSize: 16,
-        fontWeight: 'bold',
-        color: '#D97706',
-    },
-    ratingLabel: {
-        marginLeft: 6,
-        fontSize: 12,
-        color: '#92400E',
-        fontWeight: '500',
     },
     tabContainer: {
         flexDirection: 'row',

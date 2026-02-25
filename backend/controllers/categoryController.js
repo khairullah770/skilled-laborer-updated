@@ -70,7 +70,7 @@ const getCategory = async (req, res) => {
 const createCategory = async (req, res) => {
   try {
     const { name } = req.body;
-    
+
     if (!req.file) {
       return res.status(400).json({ message: 'Please upload an icon' });
     }
@@ -238,6 +238,26 @@ const deleteSubcategory = async (req, res) => {
   }
 };
 
+// @desc    Search subcategories by name
+// @route   GET /api/subcategories/search?q=<query>
+// @access  Public
+const searchSubcategories = async (req, res) => {
+  try {
+    const { q } = req.query;
+    if (!q || !q.trim()) {
+      return res.status(200).json([]);
+    }
+    const regex = new RegExp(q.trim(), 'i');
+    const subcategories = await Subcategory.find({ name: regex })
+      .limit(10)
+      .populate('category', 'name icon')
+      .lean();
+    res.status(200).json(subcategories);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
 module.exports = {
   getCategories,
   getCategory,
@@ -248,4 +268,5 @@ module.exports = {
   createSubcategory,
   updateSubcategory,
   deleteSubcategory,
+  searchSubcategories,
 };
