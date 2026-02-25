@@ -1,6 +1,9 @@
 import { Ionicons } from '@expo/vector-icons';
-import React, { useEffect, useRef, useState } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Location from 'expo-location';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Dimensions, FlatList, Image, Modal, Pressable, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import MapView, { PROVIDER_GOOGLE, Region } from 'react-native-maps';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import ServiceCard from '../../../components/ServiceCard';
 
@@ -30,6 +33,9 @@ export default function HomeScreen() {
   const { colorScheme } = useTheme();
   const colors = Colors[colorScheme];
   const [search, setSearch] = useState('');
+  const [searchResults, setSearchResults] = useState<any[]>([]);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [activeAdIndex, setActiveAdIndex] = useState(0);
   const [isFilterVisible, setIsFilterVisible] = useState(false);
   const [selectedFilters, setSelectedFilters] = useState<string[]>(['nearest']);
@@ -37,6 +43,16 @@ export default function HomeScreen() {
 
   const [categories, setCategories] = useState<BackendCategory[]>([]);
   const [loading, setLoading] = useState(true);
+  const [locationLoading, setLocationLoading] = useState(false);
+  const [locationError, setLocationError] = useState<string | null>(null);
+  const [showLocationPicker, setShowLocationPicker] = useState(false);
+  const [locationPermission, setLocationPermission] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [isSearching, setIsSearching] = useState(false);
+  const [suggestions, setSuggestions] = useState<any[]>([]);
+  const [selectedLocation, setSelectedLocation] = useState({ latitude: 33.6844, longitude: 73.0479 });
+  const [address, setAddress] = useState<string>('');
+  const mapRef = useRef<MapView>(null);
 
   const sortOptions = [
     { id: 'price_high_low', label: 'Price (High to Low)', icon: 'trending-down' },
@@ -57,6 +73,20 @@ export default function HomeScreen() {
     fetchCategories();
   }, []);
 
+  useEffect(() => {
+    const loadSaved = async () => {
+      try {
+        const saved = await AsyncStorage.getItem('customerLocation');
+        if (saved) {
+          const loc = JSON.parse(saved);
+          setSelectedLocation({ latitude: loc.latitude, longitude: loc.longitude });
+          setAddress(loc.address || '');
+        }
+      } catch { }
+    };
+    loadSaved();
+  }, []);
+
   const fetchCategories = async () => {
     try {
       const response = await fetch(`${API_URL}/api/categories`);
@@ -68,6 +98,29 @@ export default function HomeScreen() {
       setLoading(false);
     }
   };
+
+  // Debounced subcategory search
+  const handleSearchChange = useCallback((text: string) => {
+    setSearch(text);
+    if (searchTimer.current) clearTimeout(searchTimer.current);
+    if (!text.trim()) {
+      setSearchResults([]);
+      setSearchLoading(false);
+      return;
+    }
+    setSearchLoading(true);
+    searchTimer.current = setTimeout(async () => {
+      try {
+        const res = await fetch(`${API_URL}/api/subcategories/search?q=${encodeURIComponent(text.trim())}`);
+        const data = await res.json();
+        setSearchResults(data);
+      } catch {
+        setSearchResults([]);
+      } finally {
+        setSearchLoading(false);
+      }
+    }, 300);
+  }, []);
 
   const getImageUrl = (path: string) => {
     if (!path) return undefined;
@@ -113,10 +166,22 @@ export default function HomeScreen() {
           />
         </View>
         <View style={styles.headerContent}>
-          <Image
-            source={require('../../../assets/images/logo.png')}
-            style={styles.logo}
-          />
+          <View style={styles.headerTopRow}>
+            <Image
+              source={require('../../../assets/images/logo.png')}
+              style={styles.logo}
+            />
+            <TouchableOpacity
+              accessible accessibilityRole="button" accessibilityLabel="Select location"
+              style={styles.locationPill}
+              onPress={() => setShowLocationPicker(true)}
+            >
+              <Ionicons name="location-outline" size={16} color="#1F41BB" />
+              <Text style={styles.locationText} numberOfLines={1}>
+                {address || 'Select location'}
+              </Text>
+            </TouchableOpacity>
+          </View>
           <Text style={styles.title}>
             Schedule trusted{'\n'}experts for repairs.
           </Text>
@@ -130,13 +195,48 @@ export default function HomeScreen() {
           style={styles.searchInput}
           placeholder="Search for service"
           value={search}
-          onChangeText={setSearch}
+          onChangeText={handleSearchChange}
           placeholderTextColor="#9CA3AF"
         />
         <TouchableOpacity style={styles.filterButton} onPress={() => setIsFilterVisible(true)}>
           <Ionicons name="options-outline" size={20} color="#1F41BB" />
         </TouchableOpacity>
       </View>
+
+      {/* Search Results Dropdown */}
+      {search.trim().length > 0 && (searchResults.length > 0 || searchLoading) && (
+        <View style={styles.searchDropdown}>
+          {searchLoading ? (
+            <View style={{ padding: 16, alignItems: 'center' }}>
+              <ActivityIndicator size="small" color="#1F41BB" />
+            </View>
+          ) : (
+            searchResults.map((item: any) => (
+              <TouchableOpacity
+                key={item._id}
+                style={styles.searchResultItem}
+                onPress={() => {
+                  setSearch('');
+                  setSearchResults([]);
+                  router.push({
+                    pathname: '/(customer)/subcategory/[id]',
+                    params: { id: item._id, title: item.name },
+                  });
+                }}
+              >
+                <Ionicons name="construct-outline" size={18} color="#1F41BB" style={{ marginRight: 10 }} />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.searchResultName}>{item.name}</Text>
+                  {item.category?.name && (
+                    <Text style={styles.searchResultCategory}>{item.category.name}</Text>
+                  )}
+                </View>
+                <Ionicons name="chevron-forward" size={16} color="#9CA3AF" />
+              </TouchableOpacity>
+            ))
+          )}
+        </View>
+      )}
 
       {/* Filter Modal */}
       <Modal
@@ -259,6 +359,160 @@ export default function HomeScreen() {
           </>
         }
       />
+
+      <Modal visible={showLocationPicker} animationType="slide" onRequestClose={() => setShowLocationPicker(false)}>
+        <SafeAreaView style={{ flex: 1, backgroundColor: '#fff' }}>
+          <View style={styles.mapHeader}>
+            <TouchableOpacity onPress={() => setShowLocationPicker(false)} style={styles.closeMapButton}>
+              <Ionicons name="close" size={24} color="#000" />
+            </TouchableOpacity>
+            <Text style={styles.mapHeaderTitle}>Select Location</Text>
+            <View style={{ width: 24 }} />
+          </View>
+
+          <View style={{ paddingHorizontal: 16, paddingBottom: 8 }}>
+            <View style={styles.searchInputContainer}>
+              <Ionicons name="search" size={20} color="#6B7280" style={{ marginLeft: 10 }} />
+              <TextInput
+                style={styles.locationSearch}
+                placeholder="Search location..."
+                value={searchQuery}
+                onChangeText={async (text) => {
+                  setSearchQuery(text);
+                  if (!text.trim()) {
+                    setSuggestions([]);
+                    return;
+                  }
+                  setIsSearching(true);
+                  try {
+                    const response = await fetch(
+                      `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(text)}&limit=5&addressdetails=1&countrycodes=pk&accept-language=en`,
+                      { headers: { 'User-Agent': 'SkilledLaborApp/1.0', 'Accept-Language': 'en' } }
+                    );
+                    const data = await response.json();
+                    setSuggestions(data);
+                  } catch (e) {
+                    setSuggestions([]);
+                  } finally {
+                    setIsSearching(false);
+                  }
+                }}
+                returnKeyType="search"
+              />
+              {isSearching ? <ActivityIndicator size="small" color="#1F41BB" style={{ marginRight: 8 }} /> : null}
+            </View>
+            {suggestions.length > 0 && (
+              <View style={styles.suggestionsContainer}>
+                {suggestions.map((s) => (
+                  <TouchableOpacity
+                    key={s.place_id}
+                    style={styles.suggestionItem}
+                    onPress={() => {
+                      const lat = parseFloat(s.lat);
+                      const lon = parseFloat(s.lon);
+                      const region = { latitude: lat, longitude: lon, latitudeDelta: 0.01, longitudeDelta: 0.01 } as Region;
+                      mapRef.current?.animateToRegion(region, 1000);
+                      setSelectedLocation({ latitude: lat, longitude: lon });
+                      setSearchQuery(s.display_name);
+                      setSuggestions([]);
+                    }}
+                  >
+                    <Ionicons name="location-outline" size={16} color="#1F41BB" />
+                    <Text style={styles.suggestionText} numberOfLines={1}>{s.display_name}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
+          </View>
+
+          <View style={{ flex: 1 }}>
+            <MapView
+              ref={mapRef}
+              provider={PROVIDER_GOOGLE}
+              style={{ flex: 1 }}
+              initialRegion={{ latitude: selectedLocation.latitude, longitude: selectedLocation.longitude, latitudeDelta: 0.01, longitudeDelta: 0.01 }}
+              onRegionChangeComplete={(r) => setSelectedLocation({ latitude: r.latitude, longitude: r.longitude })}
+              showsUserLocation={locationPermission}
+              showsMyLocationButton={false}
+            />
+            <View style={styles.markerFixed}>
+              <Ionicons name="location" size={40} color="#1F41BB" />
+            </View>
+          </View>
+
+          {!!locationError && <Text style={{ color: '#DC2626', padding: 12 }}>{locationError}</Text>}
+
+          <View style={{ padding: 16 }}>
+            <TouchableOpacity
+              style={styles.currentLocationBtn}
+              onPress={async () => {
+                const { status } = await Location.requestForegroundPermissionsAsync();
+                if (status !== 'granted') {
+                  setLocationPermission(false);
+                  setLocationError('Location permission denied');
+                  return;
+                }
+                setLocationPermission(true);
+                try {
+                  const loc = await Location.getCurrentPositionAsync({});
+                  const region = { latitude: loc.coords.latitude, longitude: loc.coords.longitude, latitudeDelta: 0.01, longitudeDelta: 0.01 } as Region;
+                  mapRef.current?.animateToRegion(region, 1000);
+                  setSelectedLocation({ latitude: loc.coords.latitude, longitude: loc.coords.longitude });
+                } catch {
+                  setLocationError('Could not fetch current location');
+                }
+              }}
+            >
+              <Ionicons name="locate-outline" size={18} color="#1F41BB" />
+              <Text style={styles.currentLocationText}>Use Current Location</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.confirmBtn}
+              onPress={async () => {
+                setLocationLoading(true);
+                setLocationError(null);
+                try {
+                  let displayAddress = address;
+                  try {
+                    const result = await Location.reverseGeocodeAsync(selectedLocation);
+                    if (result.length > 0) {
+                      const addr = result[0];
+                      const parts = [addr.street, addr.district, addr.city, addr.region].filter(Boolean);
+                      displayAddress = parts.join(', ') || displayAddress;
+                    }
+                  } catch { }
+
+                  const token = await AsyncStorage.getItem('userToken');
+                  if (token) {
+                    await fetch(`${API_URL}/api/customers/me/location`, {
+                      method: 'PUT',
+                      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                      body: JSON.stringify({
+                        latitude: selectedLocation.latitude,
+                        longitude: selectedLocation.longitude,
+                        address: displayAddress
+                      })
+                    });
+                  }
+                  setAddress(displayAddress || `${selectedLocation.latitude.toFixed(5)}, ${selectedLocation.longitude.toFixed(5)}`);
+                  await AsyncStorage.setItem('customerLocation', JSON.stringify({
+                    latitude: selectedLocation.latitude,
+                    longitude: selectedLocation.longitude,
+                    address: displayAddress
+                  }));
+                  setShowLocationPicker(false);
+                } catch (e: any) {
+                  setLocationError('Failed to save location');
+                } finally {
+                  setLocationLoading(false);
+                }
+              }}
+            >
+              {locationLoading ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.confirmText}>Confirm Location</Text>}
+            </TouchableOpacity>
+          </View>
+        </SafeAreaView>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -288,6 +542,29 @@ const styles = StyleSheet.create({
     zIndex: 2,
     marginTop: 10,
   },
+  headerTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-start',
+  },
+  locationPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#E8EEFF',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 14,
+    marginTop: -60,
+    marginLeft: 4,
+    maxWidth: '55%',
+  },
+  locationText: {
+    color: '#1F41BB',
+    marginLeft: 4,
+    fontWeight: '600',
+    fontSize: 11,
+    maxWidth: '75%',
+  },
   headerImageContainer: {
     position: 'absolute',
     right: -30,
@@ -300,6 +577,79 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     overflow: 'hidden',
   },
+  mapHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
+  },
+  closeMapButton: {
+    width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center', backgroundColor: '#F3F4F6'
+  },
+  mapHeaderTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#111827',
+  },
+  markerFixed: {
+    position: 'absolute',
+    top: '45%',
+    left: '50%',
+    marginLeft: -20,
+    marginTop: -20,
+  },
+  searchInputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F3F4F6',
+    borderRadius: 10,
+    height: 44,
+    marginTop: 8,
+  },
+  locationSearch: {
+    flex: 1,
+    paddingHorizontal: 12,
+    fontSize: 15,
+  },
+  suggestionsContainer: {
+    backgroundColor: '#fff',
+    borderColor: '#E5E7EB',
+    borderWidth: 1,
+    borderRadius: 10,
+    marginTop: 8,
+    maxHeight: 160,
+  },
+  suggestionItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  suggestionText: {
+    marginLeft: 8,
+    color: '#111827',
+    flexShrink: 1,
+  },
+  currentLocationBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#E8EEFF',
+    padding: 12,
+    borderRadius: 10,
+    marginBottom: 10,
+    justifyContent: 'center',
+  },
+  currentLocationText: { color: '#1F41BB', marginLeft: 8, fontWeight: '600' },
+  confirmBtn: {
+    backgroundColor: '#1F41BB',
+    padding: 14,
+    borderRadius: 10,
+    alignItems: 'center',
+  },
+  confirmText: { color: '#fff', fontWeight: '700' },
   headerImage: {
     width: '100%',
     height: '100%',
@@ -351,6 +701,42 @@ const styles = StyleSheet.create({
   },
   filterButton: {
     padding: 5,
+  },
+  searchDropdown: {
+    position: 'absolute',
+    top: 235, // Positioned just below the search bar
+    left: 20,
+    right: 20,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 15,
+    paddingVertical: 10,
+    maxHeight: 300,
+    zIndex: 100,
+    elevation: 15,
+    shadowColor: '#1F41BB',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.2,
+    shadowRadius: 20,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  searchResultItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+  },
+  searchResultName: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#111827',
+  },
+  searchResultCategory: {
+    fontSize: 12,
+    color: '#6B7280',
+    marginTop: 2,
   },
   listContent: {
     paddingHorizontal: 15,

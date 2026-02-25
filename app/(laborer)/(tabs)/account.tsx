@@ -12,7 +12,6 @@ export default function AccountScreen() {
     const router = useRouter();
     const { colorScheme } = useTheme();
     const colors = Colors[colorScheme];
-    const [isAvailable, setIsAvailable] = useState(true);
     const [user, setUser] = useState<any>(null);
 
     useFocusEffect(
@@ -51,10 +50,6 @@ export default function AccountScreen() {
             fetchUser();
         }, [])
     );
-
-    const toggleAvailability = () => {
-        setIsAvailable(!isAvailable);
-    };
 
     const getVerificationBadge = () => {
         const status = user?.status || 'unverified';
@@ -134,54 +129,15 @@ export default function AccountScreen() {
                             source={{ uri: user?.profileImage ? `${API_URL}${user.profileImage}` : 'https://cdn.pixabay.com/photo/2015/10/05/22/37/blank-profile-picture-973460_1280.png' }}
                             style={styles.avatar}
                         />
-                        <TouchableOpacity style={styles.editBadge} onPress={() => router.push('/(laborer)/profile/edit')}>
-                            <Ionicons name="pencil" size={14} color="#FFF" />
-                        </TouchableOpacity>
                     </View>
                     <Text style={styles.userName}>{user?.name || 'Your Name'}</Text>
                     <Text style={styles.userEmail}>
-                        {user?.category?.name || (typeof user?.category === 'string' ? user.category : 'service')} • {user?.rating !== undefined ? Number(user.rating).toFixed(1) : '0.0'} ★
+                        {`${(user?.role || 'laborer').toString().toUpperCase()} • ${
+                            user?.categories && user.categories.length > 0
+                                ? user.categories.map((cat: any) => typeof cat === 'object' ? cat.name : cat).join(', ')
+                                : (user?.category?.name || (typeof user?.category === 'string' ? user.category : 'service'))
+                        }`}
                     </Text>
-                </TouchableOpacity>
-
-                {/* Availability Status Card */}
-                <View style={styles.availabilityCard}>
-                    <View style={styles.availabilityTextContainer}>
-                        <Text style={styles.availabilityTitle}>Availability Status</Text>
-                        <Text style={styles.availabilitySubtitle}>
-                            {isAvailable
-                                ? "You are not available for new requests"
-                                : "You are currently accepting new job requests"}
-                        </Text>
-                    </View>
-                    <TouchableOpacity
-                        style={[styles.availabilityButton, { backgroundColor: isAvailable ? '#FFFFFF' : '#EF4444' }]}
-                        onPress={toggleAvailability}
-                        activeOpacity={0.8}
-                    >
-                        <Ionicons name="power" size={20} color={isAvailable ? '#1F41BB' : '#FFFFFF'} style={styles.availabilityButtonIcon} />
-                        <Text style={[styles.availabilityButtonText, { color: isAvailable ? '#1F41BB' : '#FFFFFF' }]}>
-                            {isAvailable ? 'Available' : 'Unavailable'}
-                        </Text>
-                    </TouchableOpacity>
-                </View>
-
-                {/* Location Card */}
-                <TouchableOpacity
-                    style={styles.locationCard}
-                    onPress={() => router.push('/(laborer)/location/edit')}
-                    activeOpacity={0.8}
-                >
-                    <View style={styles.locationInfo}>
-                         <View style={styles.locationIconContainer}>
-                            <Ionicons name="location" size={24} color="#1F41BB" />
-                         </View>
-                         <View>
-                            <Text style={styles.locationTitle}>My Location</Text>
-                            <Text style={styles.locationSubtitle}>Manage your service area</Text>
-                         </View>
-                    </View>
-                    <Ionicons name="chevron-forward" size={20} color="#1F41BB" />
                 </TouchableOpacity>
 
                 {/* Menu Section */}
@@ -252,16 +208,6 @@ const styles = StyleSheet.create({
         borderWidth: 4,
         borderColor: '#FFFFFF',
     },
-    editBadge: {
-        position: 'absolute',
-        bottom: 0,
-        right: 0,
-        backgroundColor: '#10B981',
-        padding: 6,
-        borderRadius: 15,
-        borderWidth: 3,
-        borderColor: '#FFFFFF',
-    },
     userName: {
         fontSize: 22,
         fontWeight: 'bold',
@@ -283,50 +229,6 @@ const styles = StyleSheet.create({
         shadowOpacity: 0.05,
         shadowRadius: 10,
         elevation: 5,
-    },
-    availabilityCard: {
-        backgroundColor: '#1F41BB',
-        borderRadius: 20,
-        padding: 20,
-        marginHorizontal: 20,
-        marginTop: 20,
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        shadowColor: '#1F41BB',
-        shadowOffset: { width: 0, height: 10 },
-        shadowOpacity: 0.2,
-        shadowRadius: 15,
-        elevation: 10,
-    },
-    availabilityTextContainer: {
-        flex: 1,
-        paddingRight: 15,
-    },
-    availabilityTitle: {
-        color: '#FFFFFF',
-        fontSize: 18,
-        fontWeight: 'bold',
-        marginBottom: 5,
-    },
-    availabilitySubtitle: {
-        color: '#E0E7FF',
-        fontSize: 13,
-        lineHeight: 18,
-    },
-    availabilityButton: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        paddingVertical: 10,
-        paddingHorizontal: 15,
-        borderRadius: 12,
-    },
-    availabilityButtonIcon: {
-        marginRight: 8,
-    },
-    availabilityButtonText: {
-        fontWeight: 'bold',
-        fontSize: 14,
     },
     menuItem: {
         flexDirection: 'row',
@@ -380,43 +282,5 @@ const styles = StyleSheet.create({
         marginTop: 30,
         fontSize: 12,
         color: '#9CA3AF',
-    },
-    locationCard: {
-        backgroundColor: '#FFFFFF',
-        borderRadius: 20,
-        padding: 20,
-        marginHorizontal: 20,
-        marginTop: 15,
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.05,
-        shadowRadius: 10,
-        elevation: 5,
-    },
-    locationIconContainer: {
-        width: 45,
-        height: 45,
-        borderRadius: 22.5,
-        backgroundColor: '#F0F4FF',
-        justifyContent: 'center',
-        alignItems: 'center',
-        marginRight: 15,
-    },
-    locationInfo: {
-        flexDirection: 'row',
-        alignItems: 'center',
-    },
-    locationTitle: {
-        fontSize: 16,
-        fontWeight: 'bold',
-        color: '#1F2937',
-    },
-    locationSubtitle: {
-        fontSize: 13,
-        color: '#6B7280',
-        marginTop: 2,
     },
 });

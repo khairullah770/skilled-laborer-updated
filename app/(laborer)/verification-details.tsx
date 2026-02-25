@@ -198,14 +198,11 @@ export default function VerificationDetailsScreen() {
 
     const toggleCategory = (id: string) => {
         if (selectedCategoryIds.includes(id)) {
-            setSelectedCategoryIds(selectedCategoryIds.filter(c => c !== id));
-            setErrors(prev => ({ ...prev, categories: '' })); // Clear error if any
+            setSelectedCategoryIds([]);
+            setErrors(prev => ({ ...prev, categories: '' }));
         } else {
-            if (selectedCategoryIds.length >= 2) {
-                // Max 2 selected
-                return; 
-            }
-            setSelectedCategoryIds([...selectedCategoryIds, id]);
+            // Restrict to single selection
+            setSelectedCategoryIds([id]);
             setErrors(prev => ({ ...prev, categories: '' }));
         }
     };
@@ -252,37 +249,67 @@ export default function VerificationDetailsScreen() {
     const handleSubmit = async () => {
         const newErrors: {[key: string]: string} = {};
         
-        if (!fullName) newErrors.fullName = 'Full Name is required';
-        
-        if (!phone) {
-            newErrors.phone = 'Phone Number is required';
-        } else if (phone.replace(/\s/g, '').length !== 10) {
-            newErrors.phone = 'Phone number must be exactly 10 digits';
+        if (!profileImage) {
+            Alert.alert('Error', 'Profile picture is missing');
+            return;
         }
 
-        if (!dob) newErrors.dob = 'Date of Birth is required';
-        if (!address) newErrors.address = 'Address is required';
-        if (!experience) newErrors.experience = 'Experience is required';
+        if (!fullName) {
+            Alert.alert('Error', 'Full Name is missing');
+            setErrors({ fullName: 'Full Name is required' });
+            return;
+        }
+        
+        if (!email) {
+            Alert.alert('Error', 'Email address is missing');
+            setErrors({ email: 'Email address is required' });
+            return;
+        } else if (!validateEmail(email)) {
+            Alert.alert('Error', 'Invalid email address');
+            setErrors({ email: 'Please enter a valid email address' });
+            return;
+        }
 
-        if (email && !validateEmail(email)) {
-            newErrors.email = 'Please enter a valid email address';
+        if (!phone) {
+            Alert.alert('Error', 'Phone Number is missing');
+            setErrors({ phone: 'Phone Number is required' });
+            return;
+        } else if (phone.replace(/\s/g, '').length !== 10) {
+            Alert.alert('Error', 'Phone number must be exactly 10 digits');
+            setErrors({ phone: 'Phone number must be exactly 10 digits' });
+            return;
+        }
+
+        if (!dob) {
+            Alert.alert('Error', 'Date of Birth is missing');
+            setErrors({ dob: 'Date of Birth is required' });
+            return;
+        }
+
+        if (!address) {
+            Alert.alert('Error', 'Address is missing');
+            setErrors({ address: 'Address is required' });
+            return;
         }
 
         if (selectedCategoryIds.length === 0) {
-             newErrors.categories = 'Please select at least one category';
+            Alert.alert('Error', 'Category selection is missing');
+            setErrors({ categories: 'Please select at least one category' });
+            return;
         }
 
-        setErrors(newErrors);
-        if (Object.keys(newErrors).length > 0) {
-            Alert.alert('Error', 'Please correct the errors in the form');
+        if (!experience) {
+            Alert.alert('Error', 'Experience is missing');
+            setErrors({ experience: 'Experience is required' });
             return;
         }
 
         if (!idCardImage) {
-            Alert.alert('Error', 'Please upload your ID Card / Passport');
+            Alert.alert('Error', 'ID Card / Passport image is missing');
             return;
         }
 
+        setErrors({});
         setLoading(true);
         try {
             const userData = await AsyncStorage.getItem('userData');
@@ -351,20 +378,30 @@ export default function VerificationDetailsScreen() {
             const data = await response.json();
             
             if (response.ok) {
-                 const updatedUser = { ...parsedUser, ...data };
+                 // Do NOT update userData with the full data returned from verification submission
+                 // Only update the status to 'pending' in the local storage so the UI reflects the submission
+                 const updatedUser = { ...parsedUser, status: 'pending' };
                  await AsyncStorage.setItem('userData', JSON.stringify(updatedUser));
+                 setStatus('pending');
                  
                 Alert.alert(
                     "Submission Successful",
-                    "Your verification details have been submitted for review.",
+                    "Your verification details have been submitted for review. Admin will be notified immediately.",
                     [{ text: "OK", onPress: () => router.back() }]
                 );
             } else {
-                Alert.alert('Error', data.message || 'Submission failed');
+                throw new Error(data.message || 'Submission failed');
             }
         } catch (error: any) {
              console.error('Submission Error:', error);
-             Alert.alert('Error', error.message || 'Network error occurred. Please check your connection and try again.');
+             Alert.alert(
+                'Submission Failed',
+                `Error: ${error.message}. Would you like to try again?`,
+                [
+                    { text: 'Cancel', style: 'cancel' },
+                    { text: 'Retry', onPress: () => handleSubmit() }
+                ]
+             );
         } finally {
             setLoading(false);
         }
@@ -549,7 +586,7 @@ export default function VerificationDetailsScreen() {
                                 </View>
                             </TouchableOpacity>
                             <Text style={{fontSize: 12, color: '#666', marginTop: 5, marginLeft: 5}}>
-                                {selectedCategoryIds.length} of 2 categories selected
+                                {selectedCategoryIds.length} of 1 category selected
                             </Text>
                         </View>
                         {errors.categories && <Text style={styles.errorText}>{errors.categories}</Text>}
@@ -612,10 +649,16 @@ export default function VerificationDetailsScreen() {
                                 keyExtractor={(item) => item._id}
                                 renderItem={({ item }) => {
                                     const isSelected = selectedCategoryIds.includes(item._id);
+                                    const isAnyOtherSelected = selectedCategoryIds.length > 0 && !isSelected;
                                     return (
                                         <TouchableOpacity
-                                            style={[styles.categoryItem, isSelected && styles.categoryItemSelected]}
+                                            style={[
+                                                styles.categoryItem, 
+                                                isSelected && styles.categoryItemSelected,
+                                                isAnyOtherSelected && { opacity: 0.5 }
+                                            ]}
                                             onPress={() => toggleCategory(item._id)}
+                                            disabled={isAnyOtherSelected}
                                         >
                                             <View style={[styles.categoryIconBox, isSelected && styles.categoryIconBoxSelected]}>
                                                 {item.icon && (item.icon.includes('/') || item.icon.includes('\\')) ? (
@@ -661,8 +704,8 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'space-between',
         paddingHorizontal: 15,
-        paddingTop: 60,
-        paddingBottom: 20,
+        paddingTop: 30, // Reduced from 60 to improve vertical alignment
+        paddingBottom: 15, // Reduced from 20
         borderBottomWidth: 1,
         borderBottomColor: '#F3F4F6',
     },
@@ -678,6 +721,7 @@ const styles = StyleSheet.create({
         fontSize: 18,
         fontWeight: 'bold',
         color: '#1F41BB',
+        marginTop: 2, // Slight adjustment for vertical alignment
     },
     scrollContent: {
         paddingHorizontal: 20,

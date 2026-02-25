@@ -1,5 +1,6 @@
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
+const Customer = require('../models/Customer');
 
 const protect = async (req, res, next) => {
   let token;
@@ -15,12 +16,24 @@ const protect = async (req, res, next) => {
       // Verify token
       const decoded = jwt.verify(token, process.env.JWT_SECRET || 'secret');
 
-      // Get user from the token
-      req.user = await User.findById(decoded.id).select('-password');
-
-      if (!req.user) {
-        return res.status(401).json({ message: 'Not authorized, user not found' });
+      // Hydrate principal from token: support both User and Customer
+      if (decoded.role === 'customer') {
+        req.customer = await Customer.findById(decoded.id).select('-password');
+        if (!req.customer) {
+          return res.status(401).json({ message: 'Not authorized, customer not found' });
+        }
+      } else {
+        req.user = await User.findById(decoded.id).select('-password');
+        if (!req.user) {
+          return res.status(401).json({ message: 'Not authorized, user not found' });
+        }
       }
+
+      try {
+        if (req.user?._id) {
+          await User.updateOne({ _id: req.user._id }, { $set: { lastActive: new Date() } });
+        }
+      } catch {}
 
       next();
     } catch (error) {

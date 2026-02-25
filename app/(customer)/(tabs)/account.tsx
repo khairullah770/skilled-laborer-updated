@@ -1,8 +1,10 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
-import React from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useFocusEffect, useRouter } from 'expo-router';
+import React, { useCallback, useState } from 'react';
 import { Alert, Image, ScrollView, Share, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { API_URL } from '../../../constants/Api';
 import Colors from '../../../constants/Colors';
 import { useTheme } from '../../../context/ThemeContext';
 
@@ -10,6 +12,41 @@ export default function AccountScreen() {
     const router = useRouter();
     const { colorScheme } = useTheme();
     const colors = Colors[colorScheme];
+    const [customer, setCustomer] = useState<any>(null);
+
+    useFocusEffect(
+        useCallback(() => {
+            const fetchCustomer = async () => {
+                try {
+                    const userToken = await AsyncStorage.getItem('userToken');
+                    if (!userToken) return;
+                    const res = await fetch(`${API_URL}/api/customers/me`, {
+                        headers: { Authorization: `Bearer ${userToken}` }
+                    });
+                    if (res.ok) {
+                        const data = await res.json();
+                        setCustomer(data);
+                        await AsyncStorage.setItem('userData', JSON.stringify(data));
+                    } else if (res.status === 401) {
+                        Alert.alert('Session expired', 'Please log in again.', [
+                            { text: 'OK', onPress: async () => { 
+                                await AsyncStorage.removeItem('userToken'); 
+                                await AsyncStorage.removeItem('userData');
+                                router.replace('/(auth)/role-selection');
+                            }}
+                        ]);
+                    } else {
+                        const errorBody = await res.json().catch(() => ({}));
+                        console.log('Customer fetch error:', res.status, errorBody);
+                        Alert.alert('Error', errorBody.message || 'Failed to load your profile.');
+                    }
+                } catch (e) {
+                    console.log('Error fetching customer profile:', e);
+                }
+            };
+            fetchCustomer();
+        }, [])
+    );
 
     const menuItems = [
         { id: 'orders', title: 'My Orders', icon: 'cart-outline', action: () => router.push('/(customer)/(tabs)/bookings') },
@@ -33,7 +70,11 @@ export default function AccountScreen() {
             "Are you sure you want to logout?",
             [
                 { text: "Cancel", style: "cancel" },
-                { text: "Logout", style: "destructive", onPress: () => router.replace('/(auth)/role-selection') }
+                { text: "Logout", style: "destructive", onPress: async () => {
+                    await AsyncStorage.removeItem('userToken');
+                    await AsyncStorage.removeItem('userData');
+                    router.replace('/(auth)/role-selection');
+                } }
             ]
         );
     };
@@ -44,19 +85,24 @@ export default function AccountScreen() {
                 {/* Profile Header */}
                 <TouchableOpacity
                     style={styles.profileHeader}
-                    onPress={() => router.push('/profile/edit')}
+                    onPress={() => router.push('/(customer)/profile/edit')}
                     activeOpacity={0.9}
                 >
                     <View style={styles.avatarContainer}>
                         <Image
-                            source={{ uri: 'https://i.pravatar.cc/150?u=user123' }}
+                            source={{ uri: customer?.profileImage ? `${API_URL}${customer.profileImage}` : 'https://cdn.pixabay.com/photo/2015/10/05/22/37/blank-profile-picture-973460_1280.png' }}
                             style={styles.avatar}
                         />
-                        <TouchableOpacity style={styles.editBadge} onPress={() => router.push('/profile/edit')}>
+                        <TouchableOpacity style={styles.editBadge} onPress={() => router.push('/(customer)/profile/edit')}>
                             <Ionicons name="pencil" size={14} color="#FFF" />
                         </TouchableOpacity>
                     </View>
-                    <Text style={styles.userName}>KhairUllah</Text>
+                    <Text style={styles.userName}>{customer?.name || 'Your Name'}</Text>
+                    {customer?.email ? (
+                        <Text style={styles.userEmail}>{customer.email}</Text>
+                    ) : customer?.phone ? (
+                        <Text style={styles.userEmail}>{customer.phone}</Text>
+                    ) : null}
                 </TouchableOpacity>
 
                 {/* Menu Section */}

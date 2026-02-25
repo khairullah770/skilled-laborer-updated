@@ -1,8 +1,10 @@
 import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
-import { Alert, Dimensions, Image, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, Dimensions, Image, Linking, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { API_URL } from '../../../constants/Api';
 
 const { width } = Dimensions.get('window');
 
@@ -10,40 +12,210 @@ export default function JobDetailScreen() {
   const { id } = useLocalSearchParams();
   const router = useRouter();
 
-  // Simulate job data based on ID (mock)
-  // In a real app, this would come from an API or global state
   const [status, setStatus] = useState<'pending' | 'accepted' | 'in_progress' | 'completed'>('pending');
   const [detailsModalVisible, setDetailsModalVisible] = useState(false);
+  const [booking, setBooking] = useState<any | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [actionLoading, setActionLoading] = useState(false);
 
-  const jobDetails = {
-    customerName: "Khairullah khaliq",
-    date: "10 Dec, Tuesday",
-    time: "6:30 PM",
-    address: "Khayban e sir syed",
-    category: "Wiring and Rewiring",
-    description: "I need to rewire my living room. The switch board is sparking and needs immediate attention. Please bring your own tools.",
-    images: [
-        'https://picsum.photos/200/300',
-        'https://picsum.photos/200/301',
-        'https://picsum.photos/200/302'
-    ]
-  };
-  
-  // Initialize status based on some logic if needed, for now default to pending for demo
-  // or randomize it if id matches certain values
   useEffect(() => {
-    if (id === '3') setStatus('completed');
-    else if (id === '1') setStatus('pending'); // Reset to pending for demo of flow
-    // else setStatus('pending');
+    const load = async () => {
+      if (!id) {
+        setError('Missing booking id.');
+        setLoading(false);
+        return;
+      }
+      setLoading(true);
+      setError(null);
+      try {
+        const token = await AsyncStorage.getItem('userToken');
+        const res = await fetch(`${API_URL}/api/bookings/${id}`, {
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        });
+        if (!res.ok) {
+          const txt = await res.text();
+          setError(txt || 'Failed to load job details.');
+          setLoading(false);
+          return;
+        }
+        const data = await res.json();
+        setBooking(data);
+        const normalized = normalizeStatus(data.status);
+        setStatus(normalized);
+      } catch (e) {
+        setError('Network error while loading job.');
+      } finally {
+        setLoading(false);
+      }
+    };
+    load();
   }, [id]);
 
-  const handleAccept = () => setStatus('accepted');
-  const handleCancel = () => {
-    Alert.alert("Job Cancelled", "You have cancelled this job.");
-    router.back();
+  const handleAccept = async () => {
+    if (!id || !booking) return;
+    if (status !== 'pending') {
+      Alert.alert('Cannot accept', 'Only pending jobs can be accepted.');
+      return;
+    }
+    try {
+      setActionLoading(true);
+      const token = await AsyncStorage.getItem('userToken');
+      if (!token) {
+        Alert.alert('Not signed in', 'Please sign in again to accept jobs.');
+        return;
+      }
+      const res = await fetch(`${API_URL}/api/bookings/${id}/accept`, {
+        method: 'PUT',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) {
+        const txt = await res.text();
+        Alert.alert('Error', txt || 'Failed to accept booking.');
+        return;
+      }
+      const updated = await res.json();
+      setBooking(updated);
+      const normalized = normalizeStatus(updated.status);
+      setStatus(normalized);
+      Alert.alert('Job Accepted', 'You have accepted this job.', [
+        { text: 'OK', onPress: () => router.back() },
+      ]);
+    } catch (e) {
+      Alert.alert('Error', 'Network error while accepting booking.');
+    } finally {
+      setActionLoading(false);
+    }
   };
-  const handleStart = () => setStatus('in_progress');
-  const handleEnd = () => setStatus('completed');
+
+  const handleCancel = () => {
+    if (!id || !booking) return;
+    Alert.alert(
+      'Cancel Job',
+      'Are you sure you want to cancel this job?',
+      [
+        { text: 'No', style: 'cancel' },
+        {
+          text: 'Yes',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              setActionLoading(true);
+              const token = await AsyncStorage.getItem('userToken');
+              if (!token) {
+                Alert.alert('Not signed in', 'Please sign in again to cancel jobs.');
+                return;
+              }
+              const res = await fetch(`${API_URL}/api/bookings/${id}/decline`, {
+                method: 'PUT',
+                headers: {
+                  Authorization: `Bearer ${token}`,
+                  'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({})
+              });
+              if (!res.ok) {
+                const txt = await res.text();
+                Alert.alert('Error', txt || 'Failed to cancel job.');
+                return;
+              }
+              const updated = await res.json();
+              setBooking(updated);
+              const normalized = normalizeStatus(updated.status);
+              setStatus(normalized);
+              Alert.alert('Job Cancelled', 'You have cancelled this job.', [
+                { text: 'OK', onPress: () => router.back() },
+              ]);
+            } catch (e) {
+              Alert.alert('Error', 'Network error while cancelling job.');
+            } finally {
+              setActionLoading(false);
+            }
+          }
+        }
+      ]
+    );
+  };
+
+  const handleStart = async () => {
+    if (!id || !booking) return;
+    if (status !== 'accepted') {
+      Alert.alert('Cannot start', 'Only accepted jobs can be started.');
+      return;
+    }
+    try {
+      setActionLoading(true);
+      const token = await AsyncStorage.getItem('userToken');
+      if (!token) {
+        Alert.alert('Not signed in', 'Please sign in again to start jobs.');
+        return;
+      }
+      const res = await fetch(`${API_URL}/api/bookings/${id}/start`, {
+        method: 'PUT',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) {
+        const txt = await res.text();
+        Alert.alert('Error', txt || 'Failed to start job.');
+        return;
+      }
+      const updated = await res.json();
+      setBooking(updated);
+      const normalized = normalizeStatus(updated.status);
+      setStatus(normalized);
+      Alert.alert('Job Started', 'You have started this job.');
+    } catch (e) {
+      Alert.alert('Error', 'Network error while starting job.');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleEnd = () => {
+    if (!id || !booking) return;
+    if (status !== 'in_progress') {
+      Alert.alert('Cannot complete', 'Only in-progress jobs can be completed.');
+      return;
+    }
+    Alert.alert(
+      'Complete Job',
+      'Are you sure you want to complete this job and get paid?',
+      [
+        { text: 'No', style: 'cancel' },
+        {
+          text: 'Yes, Complete',
+          onPress: async () => {
+            try {
+              setActionLoading(true);
+              const token = await AsyncStorage.getItem('userToken');
+              if (!token) {
+                Alert.alert('Not signed in', 'Please sign in again to complete jobs.');
+                return;
+              }
+              const res = await fetch(`${API_URL}/api/bookings/${id}/complete`, {
+                method: 'PUT',
+                headers: { Authorization: `Bearer ${token}` },
+              });
+              if (!res.ok) {
+                const txt = await res.text();
+                Alert.alert('Error', txt || 'Failed to complete job.');
+                return;
+              }
+              const updated = await res.json();
+              setBooking(updated);
+              const normalized = normalizeStatus(updated.status);
+              setStatus(normalized);
+              Alert.alert('Job Completed', 'You have completed this job and will get paid.');
+            } catch (e) {
+              Alert.alert('Error', 'Network error while completing job.');
+            } finally {
+              setActionLoading(false);
+            }
+          }
+        }
+      ]
+    );
+  };
 
   const renderStep = (label: string, isCompleted: boolean, isLast: boolean) => (
     <View style={styles.stepContainer}>
@@ -65,6 +237,50 @@ export default function JobDetailScreen() {
   const isInProgress = status === 'in_progress' || status === 'completed';
   const isCompleted = status === 'completed';
 
+  const customer = booking?.customer;
+  const location = booking?.location || {};
+  const scheduledAt = booking?.scheduledAt ? new Date(booking.scheduledAt) : null;
+  const serviceDescription = booking?.serviceDescription || '';
+  const category = booking?.service || '';
+
+  const formattedDate = scheduledAt
+    ? scheduledAt.toLocaleDateString(undefined, { day: '2-digit', month: 'short', weekday: 'short' })
+    : '';
+  const formattedTime = scheduledAt
+    ? scheduledAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    : '';
+
+  const handleOpenMap = () => {
+    if (!location.latitude || !location.longitude) return;
+    const url = `https://www.google.com/maps/search/?api=1&query=${location.latitude},${location.longitude}`;
+    Linking.openURL(url).catch(() => {});
+  };
+
+  const handleOpenWhatsApp = async () => {
+    const raw = customer?.phone as string | undefined;
+    if (!raw) {
+      Alert.alert('No phone number', 'Customer phone number is not available.');
+      return;
+    }
+    const digits = raw.replace(/[^\d]/g, '');
+    if (!digits) {
+      Alert.alert('Invalid phone', 'Customer phone number is invalid.');
+      return;
+    }
+    const waUrl = `whatsapp://send?phone=${digits}`;
+    try {
+      const supported = await Linking.canOpenURL(waUrl);
+      if (supported) {
+        await Linking.openURL(waUrl);
+        return;
+      }
+      const webUrl = `https://wa.me/${digits}`;
+      await Linking.openURL(webUrl);
+    } catch {
+      Alert.alert('Error', 'Unable to open WhatsApp.');
+    }
+  };
+
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
       <Stack.Screen options={{ 
@@ -81,17 +297,42 @@ export default function JobDetailScreen() {
         headerStyle: { backgroundColor: '#fff' }
       }} />
 
+      {loading ? (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#1F41BB" />
+        </View>
+      ) : error ? (
+        <View style={styles.errorContainer}>
+          <Text style={styles.errorText}>{error}</Text>
+          <TouchableOpacity style={styles.retryButton} onPress={() => router.back()}>
+            <Text style={styles.retryText}>Go back</Text>
+          </TouchableOpacity>
+        </View>
+      ) : !booking ? (
+        <View style={styles.errorContainer}>
+          <Text style={styles.errorText}>Job not found.</Text>
+          <TouchableOpacity style={styles.retryButton} onPress={() => router.back()}>
+            <Text style={styles.retryText}>Go back</Text>
+          </TouchableOpacity>
+        </View>
+      ) : (
+      <>
       <ScrollView contentContainerStyle={styles.scrollContent}>
         {/* Customer Info */}
         <View style={styles.customerCard}>
-          <Image source={{ uri: 'https://randomuser.me/api/portraits/men/32.jpg' }} style={styles.avatar} />
+          <Image
+            source={{
+              uri: customer?.profileImage ? `${API_URL}${customer.profileImage}` : 'https://cdn.pixabay.com/photo/2015/10/05/22/37/blank-profile-picture-973460_1280.png',
+            }}
+            style={styles.avatar}
+          />
           <View style={styles.customerInfo}>
-            <Text style={styles.customerName}>Khairullah khaliq</Text>
-            <Text style={styles.dateText}>10</Text>
-            <Text style={styles.dateText}>Dec, Tuesday 6:30 PM</Text>
+            <Text style={styles.customerName}>{customer?.name || 'Customer'}</Text>
+            <Text style={styles.dateText}>{formattedDate}</Text>
+            <Text style={styles.dateText}>{formattedTime}</Text>
           </View>
           <View style={styles.contactIcons}>
-            <TouchableOpacity style={styles.iconButton}>
+            <TouchableOpacity style={styles.iconButton} onPress={handleOpenWhatsApp} activeOpacity={0.7}>
                 <Ionicons name="call" size={20} color="#fff" />
             </TouchableOpacity>
             {isAccepted && (
@@ -104,8 +345,10 @@ export default function JobDetailScreen() {
 
         <View style={styles.addressContainer}>
             <Text style={styles.addressLabel}>Address</Text>
-            <Text style={styles.addressText}>Khayban e sir syed</Text>
-            <Ionicons name="location" size={24} color="#1F2937" />
+            <Text style={styles.addressText}>{location.address || 'No address provided'}</Text>
+            <TouchableOpacity onPress={handleOpenMap}>
+              <Ionicons name="location" size={24} color="#1F2937" />
+            </TouchableOpacity>
         </View>
 
         {/* View Details Button (Only in pending state per image 1) */}
@@ -134,10 +377,14 @@ export default function JobDetailScreen() {
         <View style={styles.actionButtonsContainer}>
             {status === 'pending' && (
                 <>
-                    <TouchableOpacity style={styles.cancelButton} onPress={handleCancel}>
+                    <TouchableOpacity style={styles.cancelButton} onPress={handleCancel} disabled={actionLoading}>
                         <Text style={styles.cancelButtonText}>Cancel</Text>
                     </TouchableOpacity>
-                    <TouchableOpacity style={styles.acceptButton} onPress={handleAccept}>
+                    <TouchableOpacity
+                      style={[styles.acceptButton, actionLoading ? { opacity: 0.6 } : null]}
+                      onPress={handleAccept}
+                      disabled={actionLoading}
+                    >
                         <Text style={styles.acceptButtonText}>Accept Job</Text>
                     </TouchableOpacity>
                 </>
@@ -148,8 +395,12 @@ export default function JobDetailScreen() {
                 </TouchableOpacity>
             )}
             {status === 'in_progress' && (
-                 <TouchableOpacity style={styles.endButton} onPress={handleEnd}>
-                    <Text style={styles.endButtonText}>End job</Text>
+                 <TouchableOpacity
+                  style={[styles.endButton, actionLoading ? { opacity: 0.6 } : null]}
+                  onPress={handleEnd}
+                  disabled={actionLoading}
+                >
+                    <Text style={styles.endButtonText}>Complete & Get Paid</Text>
                 </TouchableOpacity>
             )}
              {/* No buttons for completed state */}
@@ -188,14 +439,14 @@ export default function JobDetailScreen() {
                     <View style={styles.detailSection}>
                         <Text style={styles.detailLabel}>Category</Text>
                         <View style={styles.categoryBadge}>
-                            <Text style={styles.categoryText}>{jobDetails.category}</Text>
+                            <Text style={styles.categoryText}>{category}</Text>
                         </View>
                     </View>
 
                     {/* Description */}
                     <View style={styles.detailSection}>
                         <Text style={styles.detailLabel}>Description</Text>
-                        <Text style={styles.detailText}>{jobDetails.description}</Text>
+                        <Text style={styles.detailText}>{serviceDescription || 'No description provided.'}</Text>
                     </View>
 
                     {/* Date & Time */}
@@ -203,7 +454,7 @@ export default function JobDetailScreen() {
                         <Text style={styles.detailLabel}>Date & Time</Text>
                         <View style={styles.dateTimeRow}>
                             <Ionicons name="calendar-outline" size={18} color="#6B7280" />
-                            <Text style={styles.dateTimeText}>{jobDetails.date} at {jobDetails.time}</Text>
+                            <Text style={styles.dateTimeText}>{formattedDate} {formattedTime ? `at ${formattedTime}` : ''}</Text>
                         </View>
                     </View>
 
@@ -212,19 +463,10 @@ export default function JobDetailScreen() {
                         <Text style={styles.detailLabel}>Location</Text>
                         <View style={styles.dateTimeRow}>
                             <Ionicons name="location-outline" size={18} color="#6B7280" />
-                            <Text style={styles.dateTimeText}>{jobDetails.address}</Text>
+                            <Text style={styles.dateTimeText}>{location.address || 'No address provided'}</Text>
                         </View>
                     </View>
 
-                    {/* Images */}
-                    <View style={styles.detailSection}>
-                        <Text style={styles.detailLabel}>Images</Text>
-                        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.imagesContainer}>
-                            {jobDetails.images.map((img, index) => (
-                                <Image key={index} source={{ uri: img }} style={styles.detailImage} />
-                            ))}
-                        </ScrollView>
-                    </View>
                 </ScrollView>
 
                 <TouchableOpacity 
@@ -236,15 +478,54 @@ export default function JobDetailScreen() {
             </View>
         </View>
       </Modal>
+      </>
+      )}
 
     </SafeAreaView>
   );
 }
 
+const normalizeStatus = (status: string): 'pending' | 'accepted' | 'in_progress' | 'completed' => {
+  const s = (status || '').toLowerCase();
+  if (s === 'pending' || s === 'waiting for laborer approval' || s === 'waiting_for_laborer_approval' || s === 'waiting for approval') {
+    return 'pending';
+  }
+  if (s === 'accepted') return 'accepted';
+  if (s === 'in progress' || s === 'in_progress') return 'in_progress';
+  if (s === 'completed') return 'completed';
+  return 'pending';
+};
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#fff',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 24,
+  },
+  errorText: {
+    fontSize: 16,
+    textAlign: 'center',
+    marginBottom: 16,
+  },
+  retryButton: {
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 8,
+    backgroundColor: '#1F41BB',
+  },
+  retryText: {
+    color: '#fff',
+    fontWeight: '600',
   },
   modalOverlay: {
     flex: 1,

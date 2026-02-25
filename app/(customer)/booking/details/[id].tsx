@@ -1,10 +1,12 @@
 import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import RNDateTimePicker from '@react-native-community/datetimepicker';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
-import React from 'react';
-import { Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import React, { useCallback, useEffect, useState } from 'react';
+import { ActivityIndicator, Alert, Image, Linking, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { API_URL, apiFetchJson } from '../../../../constants/Api';
 import Colors from '../../../../constants/Colors';
-import { LABORERS } from '../../../../constants/Laborers';
 import { useTheme } from '../../../../context/ThemeContext';
 
 export default function BookingDetailsScreen() {
@@ -12,107 +14,424 @@ export default function BookingDetailsScreen() {
     const router = useRouter();
     const { colorScheme } = useTheme();
     const colors = Colors[colorScheme];
+    const [booking, setBooking] = useState<any | null>(null);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
+    const [cancelLoading, setCancelLoading] = useState(false);
+    const [rescheduleLoading, setRescheduleLoading] = useState(false);
+    const [showDatePicker, setShowDatePicker] = useState(false);
+    const [showTimePicker, setShowTimePicker] = useState(false);
+    const [tempDate, setTempDate] = useState<Date | null>(null);
+    const [ratingValue, setRatingValue] = useState(0);
+    const [ratingComment, setRatingComment] = useState('');
+    const [ratingSubmitting, setRatingSubmitting] = useState(false);
+    const [ratingSubmitted, setRatingSubmitted] = useState(false);
 
-    // For demonstration, we'll try to find the laborer by id, or default to James Bond if not found
-    const laborer = LABORERS.find(l => l.id === id) || LABORERS[0];
+    const load = useCallback(async () => {
+        setError(null);
+        setLoading(true);
+        try {
+            const token = await AsyncStorage.getItem('userToken');
+            const { data } = await apiFetchJson<any>(`/api/bookings/${id}`, {
+                token,
+                timeoutMs: 10000,
+                retries: 2,
+            });
+            setBooking(data);
+            try {
+                await AsyncStorage.setItem(`bookingDetail:${id}`, JSON.stringify(data));
+            } catch {}
+        } catch (e: any) {
+            const message =
+                e?.body?.message ||
+                e?.message ||
+                'Failed to load booking details.';
+            setError(message);
+            try {
+                const cached = await AsyncStorage.getItem(`bookingDetail:${id}`);
+                if (cached) {
+                    const parsed = JSON.parse(cached);
+                    setBooking(parsed);
+                }
+            } catch {}
+        } finally {
+            setLoading(false);
+        }
+    }, [id]);
 
-    const jobStatus = [
-        { title: 'Job Accepted', completed: true },
-        { title: 'Job In progress', completed: false },
-        { title: 'Job Completed', completed: false },
+    useEffect(() => { load(); }, [load]);
+
+    const handleCancel = async () => {
+        if (!booking) return;
+        const statusNorm = (booking.status || '').toString().toLowerCase();
+        if (statusNorm === 'accepted' || statusNorm === 'in progress' || statusNorm === 'completed') {
+            return;
+        }
+        try {
+            setCancelLoading(true);
+            const token = await AsyncStorage.getItem('userToken');
+            await apiFetchJson(`/api/bookings/${id}/cancel`, {
+                method: 'PUT',
+                token,
+                timeoutMs: 10000,
+                retries: 1,
+            });
+            Alert.alert('Cancelled', 'Your booking has been cancelled.', [{ text: 'OK', onPress: () => router.back() }]);
+        } catch (e: any) {
+            const message =
+                e?.body?.message ||
+                e?.message ||
+                'Failed to cancel booking.';
+            Alert.alert('Error', message);
+        } finally {
+            setCancelLoading(false);
+        }
+    };
+
+    const handleReschedule = async (newDate: Date) => {
+        if (!booking) return;
+        const statusNorm = (booking.status || '').toString().toLowerCase();
+        if (statusNorm === 'accepted' || statusNorm === 'in progress' || statusNorm === 'completed') {
+            return;
+        }
+        try {
+            setRescheduleLoading(true);
+            const token = await AsyncStorage.getItem('userToken');
+            await apiFetchJson(`/api/bookings/${id}/reschedule`, {
+                method: 'PUT',
+                token,
+                body: { scheduledAt: newDate.toISOString() },
+                timeoutMs: 10000,
+                retries: 1,
+            });
+            Alert.alert('Rescheduled', 'Your booking has been rescheduled.');
+            load();
+        } catch (e: any) {
+            const message =
+                e?.body?.message ||
+                e?.message ||
+                'Failed to reschedule booking.';
+            Alert.alert('Error', message);
+        } finally {
+            setRescheduleLoading(false);
+        }
+    };
+
+    const openWhatsApp = async () => {
+        if (!booking?.laborer?.phone) {
+            Alert.alert('Unavailable', 'Laborer phone number is not available.');
+            return;
+        }
+        const raw = booking.laborer.phone.toString();
+        const phone = raw.replace(/[^\d+]/g, '');
+        const url = `whatsapp://send?phone=${phone}`;
+        try {
+            const supported = await Linking.canOpenURL(url);
+            if (supported) {
+                await Linking.openURL(url);
+            } else {
+                Alert.alert('WhatsApp not installed', 'Please install WhatsApp to contact the laborer.');
+            }
+        } catch {
+            Alert.alert('Error', 'Unable to open WhatsApp.');
+        }
+    };
+
+    const statusNorm = (booking?.status || '').toString().toLowerCase();
+    const isAccepted = statusNorm === 'accepted';
+    const isCompleted = statusNorm === 'completed';
+    const hasExistingRating = !!booking?.myRating;
+
+    const steps = [
+        { title: 'Job Accepted', key: 'Accepted' },
+        { title: 'Job In progress', key: 'In Progress' },
+        { title: 'Job Completed', key: 'Completed' }
     ];
+
+    const handleSubmitRating = async () => {
+        if (!booking || !isCompleted) {
+            return;
+        }
+        if (!ratingValue) {
+            Alert.alert('Rating required', 'Please select a star rating.');
+            return;
+        }
+        const trimmed = ratingComment.trim();
+        if (trimmed && trimmed.length < 10) {
+            Alert.alert('Comment too short', 'Please enter at least 10 characters.');
+            return;
+        }
+        try {
+            setRatingSubmitting(true);
+            const token = await AsyncStorage.getItem('userToken');
+            const { data } = await apiFetchJson<any>(`/api/bookings/${booking._id}/rate`, {
+                method: 'POST',
+                token,
+                body: {
+                    rating: ratingValue,
+                    comment: trimmed,
+                },
+                timeoutMs: 10000,
+                retries: 1,
+            });
+            setRatingSubmitted(true);
+            setBooking((prev: any) =>
+                prev
+                    ? {
+                          ...prev,
+                          myRating: {
+                              rating: data.rating,
+                              comment: data.comment || trimmed,
+                              createdAt: data.createdAt,
+                          },
+                      }
+                    : prev
+            );
+            Alert.alert('Thank you', 'Thank you for your feedback!');
+        } catch (e: any) {
+            const message =
+                e?.body?.message ||
+                e?.message ||
+                'Failed to submit rating.';
+            Alert.alert('Error', message);
+        } finally {
+            setRatingSubmitting(false);
+        }
+    };
 
     return (
         <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
             <Stack.Screen options={{ headerShown: false }} />
-
-            {/* Header */}
             <View style={styles.header}>
                 <TouchableOpacity onPress={() => router.back()} style={[styles.backButton, { backgroundColor: colorScheme === 'dark' ? '#333' : '#F3F4F6' }]}>
                     <Ionicons name="chevron-back" size={24} color={colors.text} />
                 </TouchableOpacity>
-                <Text style={[styles.headerTitle, { color: colors.text }]}>Upcoming Booking</Text>
+                <Text style={[styles.headerTitle, { color: colors.text }]}>{booking?.status || 'Booking'}</Text>
                 <View style={{ width: 40 }} />
             </View>
-
-            <ScrollView contentContainerStyle={styles.scrollContent}>
-                {/* Booking Info Row */}
-                <View style={[styles.infoRow, { borderBottomColor: colorScheme === 'dark' ? '#333' : '#F0F0F0' }]}>
-                    <View style={styles.infoSection}>
-                        <Text style={[styles.infoLabel, { color: colors.text }]}>10</Text>
-                        <Text style={[styles.infoValue, { color: colors.text }]}>Dec, Tuesday 6:30 PM</Text>
-                    </View>
-                    <View style={styles.infoSection}>
-                        <Text style={[styles.infoLabel, { color: colors.text }]}>Address</Text>
-                        <Text style={[styles.infoValue, { color: colorScheme === 'dark' ? '#9CA3AF' : '#757575' }]}>Khayban e sir syed</Text>
-                    </View>
+            {loading && !booking ? (
+                <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+                    <ActivityIndicator size="large" color="#1F41BB" />
                 </View>
-
-                {/* Laborer Section */}
-                <View style={styles.laborerSection}>
-                    <Image source={{ uri: laborer.image }} style={styles.laborerImage} />
-                    <View style={styles.laborerDetails}>
-                        <View style={styles.nameRow}>
-                            <Text style={[styles.laborerName, { color: colors.text }]}>{laborer.name}</Text>
-                            {laborer.verified && (
-                                <Ionicons name="checkmark-circle" size={18} color="#10B981" style={styles.verifiedIcon} />
-                            )}
+            ) : null}
+            {!!error && !booking && !loading && (
+                <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 24 }}>
+                    <Text style={{ color: colorScheme === 'dark' ? '#FCA5A5' : '#B91C1C', textAlign: 'center', marginBottom: 16 }}>{error}</Text>
+                    <TouchableOpacity onPress={load} style={{ paddingHorizontal: 20, paddingVertical: 10, borderRadius: 8, backgroundColor: '#1F41BB' }}>
+                        <Text style={{ color: '#fff', fontWeight: '600' }}>Try again</Text>
+                    </TouchableOpacity>
+                </View>
+            )}
+            {booking ? (
+                <ScrollView contentContainerStyle={styles.scrollContent}>
+                    <View style={[styles.infoRow, { borderBottomColor: colorScheme === 'dark' ? '#333' : '#F0F0F0' }]}>
+                        <View style={styles.infoSection}>
+                            <Text style={[styles.infoLabel, { color: colors.text }]}>{new Date(booking.scheduledAt).toLocaleDateString()}</Text>
+                            <Text style={[styles.infoValue, { color: colors.text }]}>{new Date(booking.scheduledAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</Text>
                         </View>
-                        <Text style={[styles.serviceFeeLabel, { color: colorScheme === 'dark' ? '#9CA3AF' : '#757575' }]}>Service Fee</Text>
-                        <Text style={[styles.rateText, { color: '#1F41BB' }]}>{`₹${laborer.hourlyRate} /hour`}</Text>
+                        <View style={styles.infoSection}>
+                            <Text style={[styles.infoLabel, { color: colors.text }]}>Address</Text>
+                            <Text style={[styles.infoValue, { color: colorScheme === 'dark' ? '#9CA3AF' : '#757575' }]}>{booking.location?.address || 'N/A'}</Text>
+                        </View>
                     </View>
-                    <View style={styles.actionIcons}>
-                        <TouchableOpacity style={[styles.iconCircle, { backgroundColor: '#EBF0FF' }]}>
-                            <Ionicons name="call" size={22} color="#1F41BB" />
-                        </TouchableOpacity>
-                        <TouchableOpacity style={[styles.iconCircle, { backgroundColor: '#EBF0FF' }]}>
-                            <Ionicons name="chatbubble-ellipses" size={22} color="#1F41BB" />
-                        </TouchableOpacity>
+
+                    <View style={styles.laborerSection}>
+                        <Image source={{ uri: booking.laborer?.profileImage ? `${API_URL}${booking.laborer.profileImage}` : 'https://cdn.pixabay.com/photo/2015/10/05/22/37/blank-profile-picture-973460_1280.png' }} style={styles.laborerImage} />
+                        <View style={styles.laborerDetails}>
+                            <View style={styles.nameRow}>
+                                <Text style={[styles.laborerName, { color: colors.text }]}>{booking.laborer?.name || 'Laborer'}</Text>
+                            </View>
+                            <Text style={[styles.serviceFeeLabel, { color: colorScheme === 'dark' ? '#9CA3AF' : '#757575' }]}>Service Fee</Text>
+                            <Text style={[styles.rateText, { color: '#1F41BB' }]}>{`Rs ${booking.compensation}`}</Text>
+                        </View>
+                        <View style={styles.actionIcons}>
+                            <TouchableOpacity
+                                style={[styles.iconCircle, { backgroundColor: '#EBF0FF' }]}
+                                onPress={openWhatsApp}
+                            >
+                                <Ionicons name="call" size={22} color="#1F41BB" />
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={[styles.iconCircle, { backgroundColor: '#EBF0FF' }]}
+                                onPress={openWhatsApp}
+                            >
+                                <Ionicons name="chatbubble-ellipses" size={22} color="#1F41BB" />
+                            </TouchableOpacity>
+                        </View>
                     </View>
-                </View>
 
-                {/* Action Buttons */}
-                <View style={styles.buttonRow}>
-                    <TouchableOpacity style={[styles.actionButton, styles.cancelButton]}>
-                        <Text style={styles.cancelButtonText}>Cancel</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity style={[styles.actionButton, styles.rescheduleButton]}>
-                        <Text style={styles.rescheduleButtonText}>Reschedule</Text>
-                    </TouchableOpacity>
-                </View>
+                    {isAccepted ? (
+                        <View style={styles.acceptedBadgeContainer}>
+                            <Text style={styles.acceptedBadgeText}>Accepted</Text>
+                        </View>
+                    ) : isCompleted ? (
+                        <View style={styles.acceptedBadgeContainer}>
+                            <Text style={styles.acceptedBadgeText}>Job Completed</Text>
+                        </View>
+                    ) : (
+                        <View style={styles.buttonRow}>
+                            <TouchableOpacity
+                                style={[
+                                    styles.actionButton,
+                                    styles.cancelButton,
+                                    cancelLoading && styles.actionButtonDisabled,
+                                ]}
+                                disabled={cancelLoading}
+                                onPress={handleCancel}
+                            >
+                                {cancelLoading ? (
+                                    <ActivityIndicator color="#FFF" />
+                                ) : (
+                                    <Text style={styles.cancelButtonText}>Cancel</Text>
+                                )}
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={[
+                                    styles.actionButton,
+                                    styles.rescheduleButton,
+                                    rescheduleLoading && styles.actionButtonDisabled,
+                                ]}
+                                disabled={rescheduleLoading}
+                                onPress={() => {
+                                    const current = booking.scheduledAt
+                                        ? new Date(booking.scheduledAt)
+                                        : new Date();
+                                    setTempDate(current);
+                                    setShowDatePicker(true);
+                                }}
+                            >
+                                {rescheduleLoading ? (
+                                    <ActivityIndicator color="#FFF" />
+                                ) : (
+                                    <Text style={styles.rescheduleButtonText}>Reschedule</Text>
+                                )}
+                            </TouchableOpacity>
+                        </View>
+                    )}
 
-                {/* Job Status Timeline */}
-                <View style={styles.statusSection}>
-                    <Text style={[styles.statusTitle, { color: colors.text }]}>Job Status</Text>
-                    <View style={styles.timelineContainer}>
-                        {jobStatus.map((status, index) => (
-                            <View key={index} style={styles.timelineItem}>
-                                <View style={styles.timelineLeading}>
-                                    <View style={[
-                                        styles.timelineDot,
-                                        { backgroundColor: status.completed ? '#1F41BB' : '#D1D5DB' }
-                                    ]} />
-                                    {index !== jobStatus.length - 1 && (
-                                        <View style={[
-                                            styles.timelineLine,
-                                            { backgroundColor: '#D1D5DB' }
-                                        ]} />
-                                    )}
-                                </View>
-                                <View style={styles.timelineContent}>
-                                    <Text style={[
-                                        styles.statusItemText,
-                                        { color: status.completed ? colors.text : (colorScheme === 'dark' ? '#9CA3AF' : '#757575') },
-                                        status.completed && { fontWeight: '600' }
-                                    ]}>
-                                        {status.title}
-                                    </Text>
+                    {showDatePicker && tempDate && (
+                        <RNDateTimePicker
+                            value={tempDate}
+                            mode="date"
+                            display="default"
+                            minimumDate={new Date()}
+                            onChange={(_, selectedDate) => {
+                                if (!selectedDate) {
+                                    setShowDatePicker(false);
+                                    return;
+                                }
+                                const updated = new Date(tempDate);
+                                updated.setFullYear(
+                                    selectedDate.getFullYear(),
+                                    selectedDate.getMonth(),
+                                    selectedDate.getDate()
+                                );
+                                setTempDate(updated);
+                                setShowDatePicker(false);
+                                setShowTimePicker(true);
+                            }}
+                        />
+                    )}
+
+                    {showTimePicker && tempDate && (
+                        <RNDateTimePicker
+                            value={tempDate}
+                            mode="time"
+                            display="default"
+                            onChange={(_, selectedTime) => {
+                                if (!selectedTime) {
+                                    setShowTimePicker(false);
+                                    return;
+                                }
+                                const updated = new Date(tempDate);
+                                updated.setHours(
+                                    selectedTime.getHours(),
+                                    selectedTime.getMinutes(),
+                                    0,
+                                    0
+                                );
+                                setShowTimePicker(false);
+                                handleReschedule(updated);
+                            }}
+                        />
+                    )}
+
+                    {isCompleted && !hasExistingRating && (
+                        <View style={styles.ratingSection}>
+                            <Text style={[styles.ratingTitle, { color: colors.text }]}>Rate your experience</Text>
+                            <View style={styles.ratingStarsRow}>
+                                {[1, 2, 3, 4, 5].map((star) => (
+                                    <TouchableOpacity
+                                        key={star}
+                                        onPress={() => setRatingValue(star)}
+                                        activeOpacity={0.7}
+                                        style={styles.ratingStarButton}
+                                    >
+                                        <Ionicons
+                                            name={star <= ratingValue ? 'star' : 'star-outline'}
+                                            size={32}
+                                            color={star <= ratingValue ? '#FBBF24' : '#D1D5DB'}
+                                        />
+                                    </TouchableOpacity>
+                                ))}
+                            </View>
+                            <View style={styles.ratingCommentBox}>
+                                <Text style={styles.ratingCommentLabel}>Feedback (optional)</Text>
+                                <View style={styles.ratingCommentInputWrapper}>
+                                    <TextInput
+                                        style={styles.ratingCommentInput}
+                                        placeholder="Share your experience with this laborer"
+                                        placeholderTextColor="#9CA3AF"
+                                        multiline
+                                        value={ratingComment}
+                                        onChangeText={setRatingComment}
+                                        maxLength={500}
+                                    />
                                 </View>
                             </View>
-                        ))}
+                            <TouchableOpacity
+                                style={[
+                                    styles.ratingSubmitButton,
+                                    (!ratingValue || ratingSubmitting) && styles.ratingSubmitButtonDisabled,
+                                ]}
+                                disabled={!ratingValue || ratingSubmitting}
+                                onPress={handleSubmitRating}
+                            >
+                                {ratingSubmitting ? (
+                                    <ActivityIndicator color="#FFF" />
+                                ) : (
+                                    <Text style={styles.ratingSubmitButtonText}>Submit Rating</Text>
+                                )}
+                            </TouchableOpacity>
+                            {ratingSubmitted && (
+                                <Text style={styles.ratingThankYouText}>Thank you for your feedback!</Text>
+                            )}
+                        </View>
+                    )}
+
+                    <View style={styles.statusSection}>
+                        <Text style={[styles.statusTitle, { color: colors.text }]}>Job Status</Text>
+                        <View style={styles.timelineContainer}>
+                            {steps.map((s, index) => {
+                                const completed = ['Accepted', 'In Progress', 'Completed'].indexOf(booking.status) >= index;
+                                return (
+                                    <View key={s.key} style={styles.timelineItem}>
+                                        <View style={styles.timelineLeading}>
+                                            <View style={[styles.timelineDot, { backgroundColor: completed ? '#1F41BB' : '#D1D5DB' }]} />
+                                            {index !== steps.length - 1 && (
+                                                <View style={[styles.timelineLine, { backgroundColor: '#D1D5DB' }]} />
+                                            )}
+                                        </View>
+                                        <View style={styles.timelineContent}>
+                                            <Text style={[styles.statusItemText, { color: completed ? colors.text : (colorScheme === 'dark' ? '#9CA3AF' : '#757575') }, completed && { fontWeight: '600' }]}>{s.title}</Text>
+                                        </View>
+                                    </View>
+                                );
+                            })}
+                        </View>
                     </View>
-                </View>
-            </ScrollView>
+                </ScrollView>
+            ) : null}
         </SafeAreaView>
     );
 }
@@ -208,6 +527,20 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         marginLeft: 10,
     },
+    acceptedBadgeContainer: {
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginBottom: 40,
+    },
+    acceptedBadgeText: {
+        paddingHorizontal: 24,
+        paddingVertical: 12,
+        borderRadius: 999,
+        backgroundColor: '#E0F2FE',
+        color: '#1F41BB',
+        fontSize: 16,
+        fontWeight: 'bold',
+    },
     buttonRow: {
         flexDirection: 'row',
         justifyContent: 'space-between',
@@ -236,6 +569,67 @@ const styles = StyleSheet.create({
         color: '#FFF',
         fontSize: 16,
         fontWeight: 'bold',
+    },
+    ratingSection: {
+        marginTop: 30,
+        marginBottom: 20,
+        padding: 16,
+        borderRadius: 16,
+        backgroundColor: '#F3F4FF',
+    },
+    ratingTitle: {
+        fontSize: 18,
+        fontWeight: 'bold',
+        marginBottom: 12,
+    },
+    ratingStarsRow: {
+        flexDirection: 'row',
+        marginBottom: 16,
+    },
+    ratingStarButton: {
+        marginRight: 6,
+    },
+    ratingCommentBox: {
+        marginBottom: 16,
+    },
+    ratingCommentLabel: {
+        fontSize: 14,
+        marginBottom: 6,
+        color: '#4B5563',
+    },
+    ratingCommentInputWrapper: {
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: '#D1D5DB',
+        padding: 8,
+        backgroundColor: '#FFF',
+    },
+    ratingCommentInput: {
+        minHeight: 80,
+        textAlignVertical: 'top',
+        fontSize: 14,
+        color: '#111827',
+    },
+    ratingSubmitButton: {
+        height: 50,
+        borderRadius: 12,
+        backgroundColor: '#1F41BB',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    ratingSubmitButtonDisabled: {
+        backgroundColor: '#9CA3AF',
+    },
+    ratingSubmitButtonText: {
+        color: '#FFF',
+        fontSize: 16,
+        fontWeight: '600',
+    },
+    ratingThankYouText: {
+        marginTop: 10,
+        fontSize: 14,
+        color: '#16A34A',
+        fontWeight: '500',
     },
     statusSection: {
         marginTop: 10,

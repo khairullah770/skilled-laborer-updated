@@ -1,12 +1,12 @@
 import React from 'react';
-import { StyleSheet, Text, TextInput, TextInputProps, View, ViewStyle } from 'react-native';
+import { StyleProp, StyleSheet, Text, TextInput, TextInputProps, View, ViewStyle } from 'react-native';
 
 interface InputProps extends TextInputProps {
     label?: string;
     prefix?: string;
     suffix?: React.ReactNode;
-    containerStyle?: ViewStyle;
-    inputContainerStyle?: ViewStyle;
+    containerStyle?: StyleProp<ViewStyle>;
+    inputContainerStyle?: StyleProp<ViewStyle>;
 }
 
 const Input: React.FC<InputProps> = ({ label, prefix, suffix, containerStyle, inputContainerStyle, style, ...props }) => {

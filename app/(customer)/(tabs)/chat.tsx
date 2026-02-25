@@ -89,7 +89,7 @@ const styles = StyleSheet.create({
     },
 header: {
     alignItems: 'center',
-    paddingTop: 50,  
+    paddingTop: 25,  
     paddingBottom: 15,
     borderBottomWidth: 1,
     borderBottomColor: '#F0F0F0',

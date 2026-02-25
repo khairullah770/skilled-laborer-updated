@@ -1,11 +1,11 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Alert, Image, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Button from '../../components/Button';
 import Input from '../../components/Input';
-import { API_URL } from '../../constants/Api';
+import { apiFetchJson } from '../../constants/Api';
 
 export default function LaborerSignupScreen() {
     const router = useRouter();
@@ -167,31 +167,32 @@ export default function LaborerSignupScreen() {
 
         setLoading(true);
         try {
-            const payload = {
-                password: password,
+            const payload: any = {
+                password,
                 role: 'laborer',
-                ...(signupMethod === 'email' 
-                    ? { email: email } 
-                    : { phone: `+92${phone.replace(/\s/g, '')}` })
             };
+            if (signupMethod === 'email') {
+                payload.email = email;
+            } else {
+                payload.phone = `+92${phone.replace(/\s/g, '')}`;
+            }
 
-            const response = await fetch(`${API_URL}/api/users`, {
+            const { data } = await apiFetchJson<any>('/api/users', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
+                body: payload,
+                timeoutMs: 10000,
+                retries: 1,
             });
 
-            const data = await response.json();
-
-            if (response.ok) {
-                Alert.alert('Success', 'Account created! Please log in.');
-                router.replace('/(auth)/laborer-login');
-            } else {
-                Alert.alert('Error', data.message || 'Signup failed');
-            }
-        } catch (error) {
-            Alert.alert('Error', 'Network error. Please try again.');
-            console.error(error);
+            Alert.alert('Success', 'Account created! Please log in.');
+            router.replace('/(auth)/laborer-login');
+        } catch (error: any) {
+            const message =
+                error?.body?.message ||
+                error?.message ||
+                'Unable to sign up. Please try again.';
+            Alert.alert('Error', message);
+            console.error('Laborer signup error', error);
         } finally {
             setLoading(false);
         }
@@ -260,7 +261,7 @@ export default function LaborerSignupScreen() {
                                     keyboardType="email-address"
                                     value={email}
                                     onChangeText={validateEmail}
-                                    inputContainerStyle={[styles.roundedInput, emailError ? styles.inputError : null]}
+                                    inputContainerStyle={emailError ? [styles.roundedInput, styles.inputError] : styles.roundedInput}
                                 />
                                 {emailError ? <Text style={styles.errorText}>{emailError}</Text> : null}
                             </View>

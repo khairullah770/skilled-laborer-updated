@@ -1,11 +1,13 @@
 import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Location from 'expo-location';
 import { Stack, useRouter } from 'expo-router';
 import React, { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Dimensions, FlatList, Keyboard, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import MapView, { Region } from 'react-native-maps';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import Button from '../../../components/Button';
+import { API_URL } from '../../../constants/Api';
 import { useUser } from '../../../context/UserContext';
 
 type LocationSuggestion = {
@@ -184,19 +186,54 @@ export default function EditLocationScreen() {
                 addressString = `${selectedLocation.latitude.toFixed(6)}, ${selectedLocation.longitude.toFixed(6)}`;
             }
 
+            // Get token
+            const token = await AsyncStorage.getItem('userToken');
+            if (!token) {
+                throw new Error('No auth token found');
+            }
+
+            // Update Backend (Live Location)
+            const response = await fetch(`${API_URL}/api/users/location`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify({
+                    latitude: selectedLocation.latitude,
+                    longitude: selectedLocation.longitude,
+                    address: addressString
+                })
+            });
+
+            if (!response.ok) {
+                throw new Error('Failed to update location on server');
+            }
+
+            const data = await response.json();
+
+            // Update local storage to keep it in sync with backend
+            const storedUser = await AsyncStorage.getItem('userData');
+            if (storedUser) {
+                const parsedUser = JSON.parse(storedUser);
+                parsedUser.currentLocation = data.currentLocation;
+                await AsyncStorage.setItem('userData', JSON.stringify(parsedUser));
+            }
+
             // Update Global State
+            // We update the 'location' coordinates but NOT the permanent 'address'
             updateUserData({
-                address: addressString,
                 location: selectedLocation
             });
 
             setLoading(false);
             Alert.alert(
-                "Location Saved",
-                "Your location and address have been updated in your profile.",
+                "Live Location Updated",
+                "Your current location has been shared.",
                 [{ text: "OK", onPress: () => router.back() }]
             );
         } catch (error) {
+            console.error(error);
             setLoading(false);
             Alert.alert("Error", "Failed to save location details.");
         }
@@ -313,8 +350,8 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'space-between',
         paddingHorizontal: 15,
-        paddingTop: 60,
-        paddingBottom: 20,
+        paddingTop: 10, // Further reduced from 44 to move header up more
+        paddingBottom: 10, // Reduced from 15 for a slimmer header
         borderBottomWidth: 1,
         borderBottomColor: '#F3F4F6',
         backgroundColor: '#FFF',

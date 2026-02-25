@@ -31,6 +31,11 @@ const userSchema = mongoose.Schema(
       ref: 'Category',
       default: [],
     }],
+    subcategories: [{
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Subcategory',
+      default: [],
+    }],
     status: {
       type: String,
       enum: ['unverified', 'pending', 'approved', 'rejected'],
@@ -53,6 +58,19 @@ const userSchema = mongoose.Schema(
         type: String,
         default: ''
     },
+    currentLocation: {
+        latitude: { type: Number },
+        longitude: { type: Number },
+        address: { type: String }
+    },
+    isAvailable: {
+        type: Boolean,
+        default: true
+    },
+    lastActive: {
+        type: Date,
+        default: Date.now
+    },
     profileImage: {
         type: String,
         default: ''
@@ -64,6 +82,10 @@ const userSchema = mongoose.Schema(
     rating: {
         type: Number,
         default: 0
+    },
+    notificationsEnabled: {
+        type: Boolean,
+        default: true
     },
     completedJobs: {
         type: Number,
@@ -82,6 +104,18 @@ const userSchema = mongoose.Schema(
         reason: {
             type: String
         },
+        // Store submitted data here so profile remains unchanged until approval
+        submittedData: {
+            name: String,
+            email: String,
+            phone: String,
+            dob: String,
+            address: String,
+            experience: String,
+            categories: [String],
+            profileImage: String,
+            idCardImage: String
+        },
         timestamp: {
             type: Date,
             default: Date.now
@@ -94,5 +128,8 @@ const userSchema = mongoose.Schema(
 );
 
 userSchema.index({ status: 1 }); // Index for efficient status queries
+userSchema.index({ subcategories: 1 });
+userSchema.index({ isAvailable: 1 });
+userSchema.index({ lastActive: 1 });
 
 module.exports = mongoose.model('User', userSchema);

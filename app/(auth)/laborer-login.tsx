@@ -125,7 +125,7 @@ export default function LaborerLoginScreen() {
                 if (data.role === 'admin') {
                     router.replace('/(admin)/dashboard');
                 } else if (data.role === 'laborer') {
-                    router.replace('/(laborer)/(tabs)/dashboard');
+                    router.replace('/(laborer)/(tabs)/home');
                 } else {
                     Alert.alert('Error', 'This account is not authorized');
                 }
@@ -158,15 +158,6 @@ export default function LaborerLoginScreen() {
                         </View>
 
                         <Text style={styles.welcomeText}>Welcome Skilled Laborer</Text>
-
-                        <View style={styles.socialRow}>
-                            <TouchableOpacity style={styles.socialButton}>
-                                <Ionicons name="logo-google" size={22} color="#DB4437" />
-                            </TouchableOpacity>
-                            <TouchableOpacity style={styles.socialButton}>
-                                <Ionicons name="logo-facebook" size={22} color="#1877F2" />
-                            </TouchableOpacity>
-                        </View>
 
                         <View style={styles.form}>
                             {/* Method Toggle */}
@@ -201,7 +192,7 @@ export default function LaborerLoginScreen() {
                                         keyboardType="email-address"
                                         value={email}
                                         onChangeText={validateEmail}
-                                        inputContainerStyle={[styles.roundedInput, emailError ? styles.inputError : null]}
+                                        inputContainerStyle={[styles.roundedInput, emailError ? styles.inputError : undefined].filter(Boolean) as any}
                                     />
                                     {emailError ? <Text style={styles.errorText}>{emailError}</Text> : null}
                                 </View>
@@ -214,7 +205,7 @@ export default function LaborerLoginScreen() {
                                         value={phone}
                                         onChangeText={handlePhoneChange}
                                         maxLength={11}
-                                        inputContainerStyle={[styles.roundedInput, phoneError ? styles.inputError : null]}
+                                        inputContainerStyle={[styles.roundedInput, phoneError ? styles.inputError : undefined].filter(Boolean) as any}
                                     />
                                     <Text style={styles.helperText}>Format: +92 3XX XXXXXXX</Text>
                                     {phoneError ? <Text style={styles.errorText}>{phoneError}</Text> : null}
@@ -231,7 +222,7 @@ export default function LaborerLoginScreen() {
                                         setPassword(text);
                                         setPasswordError('');
                                     }}
-                                    inputContainerStyle={[styles.roundedInput, passwordError ? styles.inputError : null]}
+                                    inputContainerStyle={[styles.roundedInput, passwordError ? styles.inputError : undefined].filter(Boolean) as any}
                                     suffix={
                                         <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
                                             <Ionicons name={showPassword ? "eye-off" : "eye"} size={20} color="#6B7280" />
@@ -302,7 +293,7 @@ const styles = StyleSheet.create({
         fontWeight: '700',
         color: '#1F41BB',
         textAlign: 'center',
-        marginBottom: 8,
+        marginBottom: 18,
     },
     socialRow: {
         flexDirection: 'row',

@@ -1,59 +1,43 @@
-import { useRouter } from 'expo-router';
-import React, { useState } from 'react';
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useFocusEffect, useRouter } from 'expo-router';
+import React, { useCallback, useState } from 'react';
+import { ActivityIndicator, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Colors from '../../../constants/Colors';
 import { useTheme } from '../../../context/ThemeContext';
-
-const UPCOMING_BOOKINGS = [
-    {
-        id: '1',
-        date: '10 Dec, Tuesday',
-        service: 'Wiring and Rewiring',
-        details: ['lorem', 'lorem'],
-        status: 'upcoming'
-    },
-    {
-        id: '3',
-        date: '12 Dec, Thursday',
-        service: 'Plumbing Repair',
-        details: ['Pipe leakage', 'Kitchen sink'],
-        status: 'accepted'
-    },
-];
-
-const COMPLETED_BOOKINGS = [
-    {
-        id: '2',
-        date: '05 Dec, Thursday',
-        service: 'Full House Painting',
-        details: ['Project finished', 'Quality check passed'],
-        status: 'completed'
-    },
-    {
-        id: '4',
-        date: '20 Nov, Wednesday',
-        service: 'Kitchen Plumbing',
-        details: ['Sink installation', 'Leak fixed'],
-        status: 'completed'
-    },
-    {
-        id: '5',
-        date: '15 Nov, Friday',
-        service: 'Electrical Wiring',
-        details: ['Living room lights', 'Switch replacement'],
-        status: 'completed'
-    },
-];
-
+import { useBookings } from '../../context/BookingsContext';
 
 export default function BookingsScreen() {
     const router = useRouter();
     const [activeTab, setActiveTab] = useState<'Upcoming' | 'Past'>('Upcoming');
     const { colorScheme } = useTheme();
     const colors = Colors[colorScheme];
+    const { upcoming, past, refreshing, refresh, lastError } = useBookings();
 
-    const bookings = activeTab === 'Upcoming' ? UPCOMING_BOOKINGS : COMPLETED_BOOKINGS;
+    useFocusEffect(useCallback(() => {
+        refresh();
+    }, [refresh]));
+
+    const statusLabel = (status: string) => {
+        const s = (status || '').toLowerCase();
+        if (s === 'pending' || s === 'waiting for laborer approval' || s === 'waiting_for_laborer_approval' || s === 'waiting for approval') {
+            return 'Pending';
+        }
+        if (s === 'accepted') {
+            return 'Accepted';
+        }
+        if (s === 'in progress') {
+            return 'Job in progress';
+        }
+        if (s === 'completed') {
+            return 'Job completed';
+        }
+        if (s === 'cancelled') {
+            return 'Cancelled';
+        }
+        return status;
+    };
+
+    const bookings = activeTab === 'Upcoming' ? upcoming : past;
 
     return (
         <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
@@ -73,43 +57,59 @@ export default function BookingsScreen() {
                 </TouchableOpacity>
             </View>
 
-            <ScrollView contentContainerStyle={styles.scrollContent}>
+            <ScrollView
+                contentContainerStyle={styles.scrollContent}
+                refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} />}
+            >
+                {!!lastError && (
+                    <View style={{ paddingTop: 10, paddingHorizontal: 5 }}>
+                        <Text style={{ color: '#D97706' }}>{lastError}</Text>
+                    </View>
+                )}
+                {refreshing && upcoming.length === 0 && activeTab === 'Upcoming' ? (
+                    <View style={{ paddingTop: 40, alignItems: 'center' }}>
+                        <ActivityIndicator size="large" color="#1F41BB" />
+                    </View>
+                ) : null}
                 {activeTab === 'Past' && (
                     <View style={styles.totalContainer}>
                         <Text style={[styles.totalText, { color: colors.text }]}>
-                            Total Bookings: <Text style={{ fontWeight: 'bold', color: colors.tint }}>{COMPLETED_BOOKINGS.length}</Text>
+                            Total Bookings: <Text style={{ fontWeight: 'bold', color: colors.tint }}>{past.length}</Text>
                         </Text>
                     </View>
                 )}
 
                 {bookings.map((booking) => (
-                    <View key={booking.id} style={[styles.bookingCard, { backgroundColor: colorScheme === 'dark' ? '#1f1f1f' : '#F0F4FF' }]}>
+                    <View key={booking._id} style={[styles.bookingCard, { backgroundColor: colorScheme === 'dark' ? '#1f1f1f' : '#F0F4FF' }]}>
                         <View style={styles.cardHeader}>
                             <View style={styles.dateSection}>
-                                <Text style={[styles.dateText, { color: colors.text }]}>{booking.date.split(',')[0]}</Text>
-                                <Text style={[styles.dayText, { color: colors.text }]}>{booking.date.split(',')[1]}</Text>
-                                {booking.details.map((detail, index) => (
-                                    <View key={index} style={styles.detailRow}>
-                                        <View style={[styles.dot, { backgroundColor: colorScheme === 'dark' ? '#9CA3AF' : '#757575' }]} />
-                                        <Text style={[styles.detailText, { color: colorScheme === 'dark' ? '#9CA3AF' : '#757575' }]}>{detail}</Text>
-                                    </View>
-                                ))}
+                                <Text style={[styles.dateText, { color: colors.text }]}>{new Date(booking.scheduledAt).toLocaleDateString()}</Text>
+                                <Text style={[styles.dayText, { color: colors.text }]}>{new Date(booking.scheduledAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</Text>
+                                <View style={styles.detailRow}>
+                                    <View style={[styles.dot, { backgroundColor: colorScheme === 'dark' ? '#9CA3AF' : '#757575' }]} />
+                                    <Text style={[styles.detailText, { color: colorScheme === 'dark' ? '#9CA3AF' : '#757575' }]}>{booking.location?.address || 'No address'}</Text>
+                                </View>
                             </View>
                             <View style={styles.serviceSection}>
-                                <Text style={[styles.serviceText, { color: colors.text }]}>{booking.service}</Text>
+                                <Text style={[styles.serviceText, { color: colors.text }]}>{booking.service} · {statusLabel(booking.status)}</Text>
                             </View>
                         </View>
 
                         <View style={styles.cardFooter}>
                             <TouchableOpacity
                                 style={[styles.viewDetailsButton, { borderColor: colors.tint }]}
-                                onPress={() => router.push(`/booking-details/${booking.id}`)}
+                                onPress={() => router.push(`/booking/details/${booking._id}`)}
                             >
                                 <Text style={[styles.viewDetailsButtonText, { color: colors.tint }]}>View details</Text>
                             </TouchableOpacity>
                         </View>
                     </View>
                 ))}
+                {bookings.length === 0 && !refreshing ? (
+                    <View style={{ paddingTop: 40, alignItems: 'center' }}>
+                        <Text style={{ color: colors.text, opacity: 0.6 }}>No {activeTab.toLowerCase()} bookings</Text>
+                    </View>
+                ) : null}
             </ScrollView>
         </SafeAreaView>
     );
@@ -122,7 +122,7 @@ const styles = StyleSheet.create({
     tabContainer: {
         flexDirection: 'row',
         paddingHorizontal: 20,
-        paddingTop: 50,
+        paddingTop: 7.8,
         borderBottomWidth: 1,
     },
     tab: {

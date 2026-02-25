@@ -17,6 +17,17 @@ interface VerificationHistory {
     status: string;
     reason?: string;
     timestamp: string;
+    submittedData?: {
+        name?: string;
+        email?: string;
+        phone?: string;
+        dob?: string;
+        address?: string;
+        experience?: string;
+        categories?: any[];
+        profileImage?: string;
+        idCardImage?: string;
+    };
 }
 
 interface User {
@@ -38,6 +49,7 @@ interface User {
   verificationHistory?: VerificationHistory[];
   createdAt: string;
   updatedAt: string;
+  isPendingReview?: boolean;
 }
 
 const UserDetailsModal: React.FC<UserDetailsModalProps> = ({ isOpen, onClose, userId, onStatusUpdate }) => {
@@ -58,6 +70,24 @@ const UserDetailsModal: React.FC<UserDetailsModalProps> = ({ isOpen, onClose, us
       setLoading(true);
       setError(null);
       const data = await fetchUserById(id);
+      
+      // If pending, merge submittedData from history for display
+      if (data.status === 'pending' && data.verificationHistory) {
+        const lastPending = [...data.verificationHistory]
+          .reverse()
+          .find((h: any) => h.status === 'pending' && h.submittedData);
+        
+        if (lastPending && lastPending.submittedData) {
+          const mergedData = {
+            ...data,
+            ...lastPending.submittedData,
+            isPendingReview: true
+          };
+          setUser(mergedData);
+          return;
+        }
+      }
+      
       setUser(data);
     } catch (err: any) {
       setError(err?.message || 'Failed to load user details');
@@ -215,6 +245,19 @@ const UserDetailsModal: React.FC<UserDetailsModalProps> = ({ isOpen, onClose, us
                 </div>
             ) : user ? (
                 <div className="space-y-8">
+                    {/* Pending Review Notice */}
+                    {user.isPendingReview && (
+                        <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-start gap-3">
+                            <Shield className="w-5 h-5 text-amber-600 mt-0.5" />
+                            <div>
+                                <h4 className="text-sm font-bold text-amber-900">Pending Verification Data</h4>
+                                <p className="text-sm text-amber-700 mt-1">
+                                    You are viewing details submitted for review. Approving this laborer will update their profile with these details.
+                                </p>
+                            </div>
+                        </div>
+                    )}
+
                     {/* Profile Header */}
                     <div className="flex flex-col md:flex-row items-start gap-6">
                         <div className="shrink-0">
@@ -329,22 +372,39 @@ const UserDetailsModal: React.FC<UserDetailsModalProps> = ({ isOpen, onClose, us
                         </div>
                     </div>
 
-                    {/* ID Document */}
-                    {user.idCardImage && (
+                    {/* Documents */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                         <div>
                             <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center">
-                                <Shield className="w-5 h-5 mr-2 text-slate-600" />
-                                Identity Verification
+                                <FileText className="w-5 h-5 mr-2 text-indigo-600" />
+                                Documents
                             </h3>
-                            <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
-                                <img 
-                                    src={`${BASE_URL}${user.idCardImage}`} 
-                                    alt="ID Document" 
-                                    className="w-full max-w-md h-auto rounded-lg shadow-sm mx-auto block"
-                                />
+                            <div className="bg-slate-50 rounded-xl p-5 border border-slate-100">
+                                <div className="text-xs font-semibold text-slate-400 uppercase mb-3">ID Card / Passport</div>
+                                {user.idCardImage ? (
+                                    <div className="relative group">
+                                        <img 
+                                            src={`${BASE_URL}${user.idCardImage}`} 
+                                            alt="ID Card" 
+                                            className="w-full h-48 object-contain rounded-lg bg-white border border-slate-200"
+                                        />
+                                        <a 
+                                            href={`${BASE_URL}${user.idCardImage}`} 
+                                            target="_blank" 
+                                            rel="noopener noreferrer"
+                                            className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity rounded-lg text-white font-medium"
+                                        >
+                                            View Full Image
+                                        </a>
+                                    </div>
+                                ) : (
+                                    <div className="h-48 flex items-center justify-center bg-slate-100 rounded-lg text-slate-400 italic">
+                                        No ID Card uploaded
+                                    </div>
+                                )}
                             </div>
                         </div>
-                    )}
+                    </div>
 
                     {/* Verification History */}
                     {user.verificationHistory && user.verificationHistory.length > 0 && (

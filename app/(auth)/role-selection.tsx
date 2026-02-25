@@ -33,7 +33,7 @@ export default function RoleSelectionScreen() {
             </View>
 
             <View style={styles.bottomCard}>
-                <Text style={styles.cardTitle}>Welcome to Skilled Laborer Services</Text>
+                <Text style={styles.cardTitle}>Welcome to Skilled Labor Services</Text>
 
                 <View style={styles.buttonsContainer}>
                     <TouchableOpacity style={[styles.button, styles.primaryButton]} onPress={goToCustomerLogin}>
@@ -90,7 +90,7 @@ const styles = StyleSheet.create({
         borderTopRightRadius: 32,
     },
     cardTitle: {
-        fontSize: 20,
+        fontSize: 22,
         fontWeight: '700',
         color: '#FFFFFF',
         textAlign: 'center',
