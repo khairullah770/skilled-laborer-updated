@@ -5,6 +5,7 @@ import React, { useCallback, useState } from 'react';
 import { Text, View } from 'react-native';
 
 import { useColorScheme } from '../../../components/useColorScheme';
+import { useSocket } from '../../../context/SocketContext';
 
 function TabBarIcon(props: {
     name: React.ComponentProps<typeof Ionicons>['name'];
@@ -64,8 +65,43 @@ function NotificationTabIcon(props: { color: string }) {
     );
 }
 
+function ChatTabIcon(props: { color: string }) {
+    const { totalUnread } = useSocket();
+
+    return (
+        <View style={{ width: 32, height: 32, justifyContent: 'center', alignItems: 'center' }}>
+            <Ionicons size={28} style={{ marginBottom: -3 }} name="chatbubbles" color={props.color} />
+            {totalUnread > 0 && (
+                <View
+                    style={{
+                        position: 'absolute',
+                        top: -2,
+                        right: -6,
+                        minWidth: 16,
+                        height: 16,
+                        borderRadius: 8,
+                        backgroundColor: '#EF4444',
+                        justifyContent: 'center',
+                        alignItems: 'center',
+                        paddingHorizontal: 2,
+                    }}
+                >
+                    <Text style={{ color: '#fff', fontSize: 10, fontWeight: '700' }}>
+                        {totalUnread > 9 ? '9+' : totalUnread}
+                    </Text>
+                </View>
+            )}
+        </View>
+    );
+}
+
 export default function TabLayout() {
     const colorScheme = useColorScheme();
+    const { reconnect } = useSocket();
+
+    React.useEffect(() => {
+        reconnect();
+    }, []);
 
     return (
         <Tabs
@@ -104,6 +140,13 @@ export default function TabLayout() {
                 options={{
                     title: 'Services',
                     tabBarIcon: ({ color }) => <TabBarIcon name="construct" color={color} />,
+                }}
+            />
+            <Tabs.Screen
+                name="chat"
+                options={{
+                    title: 'Chats',
+                    tabBarIcon: ({ color }) => <ChatTabIcon color={color} />,
                 }}
             />
             <Tabs.Screen

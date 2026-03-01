@@ -122,10 +122,14 @@ export default function SubCategoryDetailsScreen() {
             if (activeFilters.includes('ratings')) sortParts.push('ratings');
             params.append('sortBy', sortParts.join(','));
             params.append('onlineOnly', 'false');
-            params.append('includeUnapproved', 'true');
+            params.append('includeUnapproved', 'false');
             const res = await fetch(`${API_URL}/api/services/search-laborers?${params.toString()}`);
             const data = await res.json();
-            const mapped = (data.results || []).map((r: any) => ({
+            const mapped = (data.results || []).filter((r: any) => {
+                // Only show laborers with a real name (not empty/placeholder)
+                const name = r.profile?.name?.trim();
+                return name && name.toLowerCase() !== 'laborer';
+            }).map((r: any) => ({
                 id: r.laborerId,
                 name: r.profile?.name || 'Laborer',
                 image: r.profile?.profileImage

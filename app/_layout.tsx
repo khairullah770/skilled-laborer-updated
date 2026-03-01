@@ -6,12 +6,13 @@ import * as SplashScreen from 'expo-splash-screen';
 import { useEffect } from 'react';
 import 'react-native-reanimated';
 
+import { SocketProvider } from '../context/SocketContext';
 import { ThemeProvider as CustomThemeProvider, useTheme } from '../context/ThemeContext';
 import { UserProvider } from '../context/UserContext';
 
 export {
-  // Catch any errors thrown by the Layout component.
-  ErrorBoundary
+    // Catch any errors thrown by the Layout component.
+    ErrorBoundary
 } from 'expo-router';
 
 export const unstable_settings = {
@@ -46,7 +47,9 @@ export default function RootLayout() {
   return (
     <CustomThemeProvider>
       <UserProvider>
-        <RootLayoutNav />
+        <SocketProvider>
+          <RootLayoutNav />
+        </SocketProvider>
       </UserProvider>
     </CustomThemeProvider>
   );

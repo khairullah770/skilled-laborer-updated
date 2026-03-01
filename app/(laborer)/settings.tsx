@@ -167,6 +167,7 @@ const styles = StyleSheet.create({
     optionLeft: {
         flexDirection: 'row',
         alignItems: 'center',
+        flex: 1,
     },
     iconBackground: {
         width: 40,

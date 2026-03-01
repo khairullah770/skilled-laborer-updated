@@ -25,8 +25,7 @@ export default function HomeScreen() {
     try {
       const raw = (u?.name ?? '').toString().trim();
       if (raw.length > 0) {
-        const first = raw.split(/\s+/)[0];
-        return first.length > 0 ? first : 'Laborer';
+        return raw;
       }
       const email = (u?.email ?? '').toString();
       if (email.includes('@')) {
@@ -46,9 +45,8 @@ export default function HomeScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [user, setUser] = useState<any>(null);
   const [stats, setStats] = useState<any>({
-    todayEarnings: 0,
-    completedJobsToday: 0,
-    shiftHours: 0,
+    totalEarnings: 0,
+    totalCompletedJobs: 0,
     currentRating: 0,
     totalReviews: 0,
     ratingBreakdown: { 5: 0, 4: 0, 3: 0, 2: 0, 1: 0 }
@@ -206,25 +204,25 @@ export default function HomeScreen() {
 
         {/* Quick Stats Grid */}
         <View style={styles.sectionContainer}>
-          <Text style={[styles.sectionTitle, { color: colors.text }]}>Today's Overview</Text>
+          <Text style={[styles.sectionTitle, { color: colors.text }]}>Overview</Text>
           <View style={styles.statsGrid}>
             <View style={[styles.statBox, { backgroundColor: colorScheme === 'dark' ? '#1F1F1F' : '#FFFFFF' }]}>
               <View style={[styles.statIcon, { backgroundColor: '#ECFDF5' }]}>
                 <Ionicons name="wallet" size={20} color="#059669" />
               </View>
-              <Text style={[styles.statValue, { color: colors.text }]}>
-                {loading ? '...' : `Rs ${stats.todayEarnings.toFixed(0)}`}
+              <Text numberOfLines={1} adjustsFontSizeToFit style={[styles.statValue, { color: colors.text }]}>
+                {loading ? '...' : `Rs ${(stats.totalEarnings || 0).toFixed(0)}`}
               </Text>
-              <Text style={[styles.statLabel, { color: colors.text, opacity: 0.5 }]}>Earnings</Text>
+              <Text numberOfLines={1} style={[styles.statLabel, { color: colors.text, opacity: 0.5 }]}>Total Earnings</Text>
             </View>
             <View style={[styles.statBox, { backgroundColor: colorScheme === 'dark' ? '#1F1F1F' : '#FFFFFF' }]}>
               <View style={[styles.statIcon, { backgroundColor: '#F5F3FF' }]}>
                 <Ionicons name="checkmark-done" size={20} color="#7C3AED" />
               </View>
               <Text style={[styles.statValue, { color: colors.text }]}>
-                {loading ? '...' : stats.completedJobsToday}
+                {loading ? '...' : (stats.totalCompletedJobs || 0)}
               </Text>
-              <Text style={[styles.statLabel, { color: colors.text, opacity: 0.5 }]}>Jobs Done</Text>
+              <Text style={[styles.statLabel, { color: colors.text, opacity: 0.5 }]}>Jobs Completed</Text>
             </View>
           </View>
         </View>
@@ -238,27 +236,32 @@ export default function HomeScreen() {
             <Text style={[styles.ratingTitle, { color: colors.text }]}>Your Ratings</Text>
             <View style={styles.ratingBadge}>
               <Ionicons name="star" size={14} color="#F59E0B" />
-              <Text style={styles.ratingBadgeText}>{stats.currentRating.toFixed(1)}</Text>
+              <Text style={styles.ratingBadgeText}>{(Math.floor(Number(stats.currentRating || 0) * 10) / 10).toFixed(1)}</Text>
             </View>
           </View>
           <View style={styles.ratingContent}>
             <View style={styles.ratingInfo}>
               <View style={styles.starsContainer}>
-                {[1, 2, 3, 4, 5].map((star) => (
-                  <Ionicons 
-                    key={star} 
-                    name={star <= Math.round(stats.currentRating) ? "star" : "star-outline"} 
-                    size={20} 
-                    color="#F59E0B" 
-                    style={{ marginRight: 2 }}
-                  />
-                ))}
+                {[1, 2, 3, 4, 5].map((star) => {
+                  const fill = (stats.currentRating || 0) - (star - 1);
+                  const isFull = fill >= 0.75;
+                  const isHalf = !isFull && fill >= 0.25;
+                  return (
+                    <Ionicons 
+                      key={star} 
+                      name={isFull ? "star" : isHalf ? "star-half" : "star-outline"} 
+                      size={20} 
+                      color="#F59E0B" 
+                      style={{ marginRight: 2 }}
+                    />
+                  );
+                })}
               </View>
             </View>
             <View style={styles.circularProgress}>
               <View style={[styles.progressInner, { borderColor: '#F59E0B' }]}>
                 <Text style={[styles.progressText, { color: colors.text }]}>
-                  {((stats.currentRating / 5) * 100).toFixed(0)}%
+                  {((Number(stats.currentRating || 0) / 5) * 100).toFixed(0)}%
                 </Text>
               </View>
             </View>

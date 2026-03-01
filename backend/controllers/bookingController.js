@@ -1,6 +1,7 @@
 const mongoose = require("mongoose");
 const Booking = require("../models/Booking");
 const User = require("../models/User");
+const Chat = require("../models/Chat");
 const Notification = require("../models/Notification");
 const ServiceOffering = require("../models/ServiceOffering");
 const JobRating = require("../models/JobRating");
@@ -13,10 +14,41 @@ const { sendPushNotification } = require("../utils/notificationService");
 const getBookings = async (req, res) => {
   try {
     const bookings = await Booking.find()
-      .populate("customer", "name email")
-      .populate("laborer", "name category")
+      .populate("customer", "name firstName lastName email phone")
+      .populate({
+        path: "laborer",
+        select: "name email phone profileImage categories verificationHistory",
+        populate: { path: "categories", select: "name" },
+      })
       .sort({ createdAt: -1 });
-    res.status(200).json(bookings);
+
+    // Resolve laborer names from verificationHistory if main name is empty
+    const results = bookings.map((b) => {
+      const obj = b.toJSON();
+      if (obj.laborer && !obj.laborer.name) {
+        const history = obj.laborer.verificationHistory;
+        if (Array.isArray(history) && history.length > 0) {
+          const last = [...history].reverse().find((h) => h.submittedData);
+          if (last && last.submittedData) {
+            obj.laborer.name =
+              last.submittedData.name || obj.laborer.email || "Unknown";
+            if (!obj.laborer.profileImage && last.submittedData.profileImage) {
+              obj.laborer.profileImage = last.submittedData.profileImage;
+            }
+          }
+        }
+      }
+      // Resolve customer name fallback
+      if (obj.customer && !obj.customer.name) {
+        obj.customer.name =
+          `${obj.customer.firstName || ""} ${obj.customer.lastName || ""}`.trim() ||
+          obj.customer.email ||
+          "Unknown";
+      }
+      return obj;
+    });
+
+    res.status(200).json(results);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -306,6 +338,7 @@ const acceptBooking = async (req, res) => {
     } catch (pushErr) {
       console.error("Push notification failed for booking accept:", pushErr);
     }
+    await booking.populate("customer", "name profileImage phone email");
     res.json(booking);
   } catch (error) {
     res.status(400).json({ message: error.message });
@@ -412,6 +445,7 @@ const startBooking = async (req, res) => {
     } catch (pushErr) {
       console.error("Push notification failed for booking start:", pushErr);
     }
+    await booking.populate("customer", "name profileImage phone email");
     res.json(booking);
   } catch (error) {
     res.status(400).json({ message: error.message });
@@ -437,6 +471,18 @@ const completeBooking = async (req, res) => {
     booking.paymentStatus = "Paid";
     booking.log.push({ action: "completed", by: req.user._id });
     await booking.save();
+
+    // Deactivate the chat for this booking
+    await Chat.updateOne(
+      { booking: booking._id },
+      { $set: { isActive: false } },
+    );
+
+    // Increment the laborer's completed jobs count
+    await User.updateOne(
+      { _id: booking.laborer },
+      { $inc: { completedJobs: 1 } },
+    );
     const laborerName = req.user.name || "your laborer";
     await Notification.create({
       recipient: booking.customer,
@@ -462,6 +508,7 @@ const completeBooking = async (req, res) => {
     } catch (pushErr) {
       console.error("Push notification failed for booking complete:", pushErr);
     }
+    await booking.populate("customer", "name profileImage phone email");
     res.json(booking);
   } catch (error) {
     res.status(400).json({ message: error.message });
@@ -534,14 +581,15 @@ const rateBooking = async (req, res) => {
         .json({ message: "You can only submit one rating per minute" });
     }
 
-    const ratingValue = Number(req.body.rating);
-    if (!Number.isInteger(ratingValue) || ratingValue < 1 || ratingValue > 5) {
+    const ratingRaw = Number(req.body.rating);
+    if (!Number.isFinite(ratingRaw) || ratingRaw < 0.5 || ratingRaw > 5) {
       await session.abortTransaction().catch(() => {});
       session.endSession();
       return res
         .status(400)
-        .json({ message: "Rating must be an integer between 1 and 5" });
+        .json({ message: "Rating must be between 0.5 and 5" });
     }
+    const ratingValue = Math.round(ratingRaw * 10) / 10;
 
     let comment = "";
     if (typeof req.body.comment === "string") {
@@ -745,16 +793,34 @@ const cancelBooking = async (req, res) => {
         message: "Cannot cancel a booking that has been accepted or completed",
       });
     }
-    booking.status = "Cancelled";
-    booking.log.push({ action: "cancelled", by: principalId });
-    await booking.save();
+
+    // Send cancellation notification to the laborer
     await Notification.create({
       recipient: booking.laborer,
       type: "job_request",
       title: "Booking Cancelled",
-      message: `A ${booking.service} booking was cancelled`,
+      message: `A ${booking.service} booking was cancelled by the customer`,
       data: { bookingId: booking._id },
     });
+
+    // If the booking was never approved (Pending/Rescheduled), delete it entirely
+    if (
+      statusNorm === "pending" ||
+      statusNorm === "rescheduled" ||
+      statusNorm === "waiting for laborer approval" ||
+      statusNorm === "waiting_for_laborer_approval"
+    ) {
+      await Booking.findByIdAndDelete(booking._id);
+      return res.json({
+        message: "Booking cancelled and removed",
+        deleted: true,
+      });
+    }
+
+    // Fallback: mark as Cancelled for any other pre-accepted status
+    booking.status = "Cancelled";
+    booking.log.push({ action: "cancelled", by: principalId });
+    await booking.save();
     res.json(booking);
   } catch (error) {
     res.status(400).json({ message: error.message });
@@ -817,13 +883,20 @@ const checkAcceptedBooking = async (req, res) => {
     const customerId = req.customer?._id || req.user?._id;
     if (!customerId) return res.status(401).json({ hasAcceptedBooking: false });
 
-    const exists = await Booking.exists({
+    const booking = await Booking.findOne({
       customer: customerId,
       laborer: req.params.laborerId,
       status: { $in: ["Accepted", "In Progress", "Completed"] },
-    });
+    })
+      .select("_id status")
+      .sort({ updatedAt: -1 })
+      .lean();
 
-    return res.json({ hasAcceptedBooking: !!exists });
+    return res.json({
+      hasAcceptedBooking: !!booking,
+      bookingId: booking?._id || null,
+      bookingStatus: booking?.status || null,
+    });
   } catch (err) {
     console.error("[checkAcceptedBooking]", err);
     return res.status(500).json({ hasAcceptedBooking: false });

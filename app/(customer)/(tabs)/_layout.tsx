@@ -1,10 +1,47 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Tabs } from 'expo-router';
 import React from 'react';
+import { Text, View } from 'react-native';
 import { useColorScheme } from '../../../components/useColorScheme';
+import { useSocket } from '../../../context/SocketContext';
+
+function ChatTabIcon(props: { color: string }) {
+    const { totalUnread } = useSocket();
+
+    return (
+        <View style={{ width: 28, height: 28, justifyContent: 'center', alignItems: 'center' }}>
+            <Ionicons size={24} name="chatbubbles" color={props.color} />
+            {totalUnread > 0 && (
+                <View
+                    style={{
+                        position: 'absolute',
+                        top: -4,
+                        right: -8,
+                        minWidth: 16,
+                        height: 16,
+                        borderRadius: 8,
+                        backgroundColor: '#EF4444',
+                        justifyContent: 'center',
+                        alignItems: 'center',
+                        paddingHorizontal: 2,
+                    }}
+                >
+                    <Text style={{ color: '#fff', fontSize: 10, fontWeight: '700' }}>
+                        {totalUnread > 9 ? '9+' : totalUnread}
+                    </Text>
+                </View>
+            )}
+        </View>
+    );
+}
 
 export default function TabLayout() {
   const colorScheme = useColorScheme();
+  const { reconnect } = useSocket();
+
+  React.useEffect(() => {
+    reconnect();
+  }, []);
 
   return (
     <Tabs
@@ -49,8 +86,8 @@ export default function TabLayout() {
       <Tabs.Screen
         name="chat"
         options={{
-          title: 'Contact',
-          tabBarIcon: ({ color }) => <Ionicons name="chatbubbles" size={24} color={color} />,
+          title: 'Chats',
+          tabBarIcon: ({ color }) => <ChatTabIcon color={color} />,
         }}
       />
       <Tabs.Screen

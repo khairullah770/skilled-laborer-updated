@@ -3,18 +3,18 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
-  Dimensions,
-  Keyboard,
-  KeyboardAvoidingView,
-  Platform,
-  RefreshControl,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View
+    ActivityIndicator,
+    Dimensions,
+    Keyboard,
+    KeyboardAvoidingView,
+    Platform,
+    RefreshControl,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { API_URL } from '../../../constants/Api';
@@ -388,7 +388,7 @@ export default function ServiceScreen() {
                   )}
                   {editingId && (
                     <View style={{ marginBottom: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-                      <Text style={{ fontSize: 12 }}>Editing: {activeSub.name}</Text>
+                      <Text numberOfLines={1} ellipsizeMode="tail" style={{ fontSize: 12, flex: 1, marginRight: 8 }}>Editing: {activeSub.name}</Text>
                       <TouchableOpacity onPress={cancelEdit} style={{ paddingVertical: 6, paddingHorizontal: 10, borderRadius: 8, backgroundColor: '#F3F4F6' }}>
                         <Text style={{ color: '#111827', fontWeight: '700' }}>Cancel</Text>
                       </TouchableOpacity>
@@ -571,6 +571,7 @@ const styles = StyleSheet.create({
   cardTitle: {
     fontSize: 16,
     fontWeight: '700',
+    flex: 1,
   },
   sectionSubtitle: {
     fontSize: 14,
@@ -589,10 +590,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     borderRadius: 20,
     borderWidth: 1,
+    maxWidth: '100%',
   },
   subcategoryChipText: {
     fontSize: 13,
     fontWeight: '500',
+    flexShrink: 1,
   },
   input: {
     backgroundColor: '#F3F4F6',
@@ -627,7 +630,9 @@ const styles = StyleSheet.create({
   },
   serviceTitle: {
     fontSize: 15,
-    fontWeight: '700'
+    fontWeight: '700',
+    flex: 1,
+    marginRight: 8,
   },
   statusPill: {
     paddingVertical: 4,

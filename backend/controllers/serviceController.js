@@ -2,6 +2,7 @@ const mongoose = require("mongoose");
 const ServiceOffering = require("../models/ServiceOffering");
 const Subcategory = require("../models/Subcategory");
 const User = require("../models/User");
+const Booking = require("../models/Booking");
 
 // Ensure requester is an approved laborer
 const assertApprovedLaborer = async (req) => {
@@ -52,11 +53,9 @@ const upsertServiceOffering = async (req, res) => {
     }
 
     if (priceNum < sub.minPrice || priceNum > sub.maxPrice) {
-      return res
-        .status(400)
-        .json({
-          message: `Price must be between ${sub.minPrice} and ${sub.maxPrice}`,
-        });
+      return res.status(400).json({
+        message: `Price must be between ${sub.minPrice} and ${sub.maxPrice}`,
+      });
     }
 
     const payload = {
@@ -190,6 +189,25 @@ module.exports = {
         "name profileImage rating experience currentLocation isAvailable lastActive status completedJobs",
       );
       const userMap = new Map(users.map((u) => [u._id.toString(), u]));
+
+      // Count actual completed bookings per laborer dynamically
+      const completedCounts = await Booking.aggregate([
+        {
+          $match: {
+            laborer: {
+              $in: laborerIds.map(
+                (id) => new mongoose.Types.ObjectId(id.toString()),
+              ),
+            },
+            status: "Completed",
+          },
+        },
+        { $group: { _id: "$laborer", count: { $sum: 1 } } },
+      ]);
+      const completedJobsMap = new Map(
+        completedCounts.map((r) => [r._id.toString(), r.count]),
+      );
+
       let approvedCount = 0,
         onlineCount = 0;
       const data = offerings
@@ -231,7 +249,8 @@ module.exports = {
                   currentLocation: u.currentLocation || null,
                   online,
                   status: u.status,
-                  completedJobs: u.completedJobs || 0,
+                  completedJobs:
+                    completedJobsMap.get(o.laborer.toString()) || 0,
                 }
               : null,
             distanceKm,

@@ -308,9 +308,9 @@ const styles = StyleSheet.create({
     title: {
         fontSize: 22,
         fontWeight: '700',
-        color: '#333',
+        color: '#1F41BB',
         marginTop: 40,
-        alignSelf: 'center', // Keep title centered if that's preferred, or let it follow header
+        alignSelf: 'center',// Keep title centered if that's preferred, or let it follow header
     },
     continueText: {
         fontSize: 14,

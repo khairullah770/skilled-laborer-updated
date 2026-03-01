@@ -16,6 +16,7 @@ export default function CustomerLayout() {
                 <Stack.Screen name="profile/edit" options={{ headerShown: false }} />
                 <Stack.Screen name="subcategory/[id]" options={{ headerShown: false }} />
                 <Stack.Screen name="all-categories" options={{ headerShown: false }} />
+                <Stack.Screen name="conversation/[id]" options={{ headerShown: false }} />
                 <Stack.Screen name="settings" options={{ headerShown: true, title: 'Settings' }} />
             </Stack>
         </BookingsProvider>

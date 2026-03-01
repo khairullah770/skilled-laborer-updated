@@ -215,19 +215,6 @@ export default function LaborerSignupScreen() {
                         <Text style={styles.title}>LABORER SIGN UP</Text>
                     </View>
 
-                    <Text style={styles.continueText}>CONTINUE WITH</Text>
-                    <View style={styles.socialRow}>
-                        <TouchableOpacity style={styles.socialIcon}>
-                            <Ionicons name="logo-google" size={28} color="#EA4335" />
-                        </TouchableOpacity>
-                        <TouchableOpacity style={styles.socialIcon}>
-                            <Ionicons name="logo-facebook" size={28} color="#1877F2" />
-                        </TouchableOpacity>
-                        <TouchableOpacity style={styles.socialIcon}>
-                            <Ionicons name="mail" size={28} color="#4285F4" />
-                        </TouchableOpacity>
-                    </View>
-
                     <View style={styles.form}>
                         {/* Method Toggle */}
                         <View style={styles.methodToggleContainer}>
@@ -461,7 +448,7 @@ const styles = StyleSheet.create({
         marginTop: 10,
     },
     signupButtonText: {
-        fontSize: 18,
+        fontSize: 16,
         fontWeight: '700',
     },
     footer: {
@@ -490,6 +477,7 @@ const styles = StyleSheet.create({
     methodToggleButton: {
         flex: 1,
         paddingVertical: 12,
+        paddingHorizontal: 10,
         alignItems: 'center',
         borderRadius: 25,
     },

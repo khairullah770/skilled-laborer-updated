@@ -130,12 +130,12 @@ export default function NotificationScreen() {
       </View>
       <View style={styles.contentContainer}>
         <View style={styles.headerRow}>
-          <Text style={[styles.itemTitle, { color: colors.text, fontWeight: item.isRead ? '600' : '700' }]}>
+          <Text numberOfLines={2} ellipsizeMode="tail" style={[styles.itemTitle, { color: colors.text, fontWeight: item.isRead ? '600' : '700' }]}>
             {item.title}
           </Text>
           {!item.isRead && <View style={styles.unreadDot} />}
         </View>
-        <Text style={[styles.itemMessage, { color: colors.text, opacity: 0.8 }]}>
+        <Text numberOfLines={3} ellipsizeMode="tail" style={[styles.itemMessage, { color: colors.text, opacity: 0.8 }]}>
           {item.message}
         </Text>
         <Text style={styles.itemTime}>

@@ -1,4 +1,4 @@
-import { ArrowDown, ArrowUp, Calendar, Clock, DollarSign, TrendingUp, Users } from 'lucide-react';
+import { ArrowDown, ArrowUp, Briefcase, Calendar, Clock, DollarSign, TrendingUp } from 'lucide-react';
 import type { ElementType } from 'react';
 import { useEffect, useState } from 'react';
 import { fetchDashboardStats } from '../api';
@@ -14,6 +14,7 @@ interface StatCardProps {
 
 interface DashboardStats {
   totalUsers: number;
+  totalLaborers: number;
   activeBookings: number;
   totalRevenue: number;
   pendingApprovals: number;
@@ -46,6 +47,7 @@ const StatCard = ({ title, value, change, icon: Icon, trend, color }: StatCardPr
 const Dashboard = () => {
   const [stats, setStats] = useState<DashboardStats>({
     totalUsers: 0,
+    totalLaborers: 0,
     activeBookings: 0,
     totalRevenue: 0,
     pendingApprovals: 0,
@@ -70,11 +72,11 @@ const Dashboard = () => {
 
   const statCards = [
     {
-      title: 'Total Users',
-      value: stats.totalUsers.toLocaleString(),
+      title: 'Total Laborers',
+      value: stats.totalLaborers.toLocaleString(),
       change: '12%',
       trend: 'up' as const,
-      icon: Users,
+      icon: Briefcase,
       color: 'from-indigo-500 to-indigo-600',
     },
     {
@@ -87,7 +89,7 @@ const Dashboard = () => {
     },
     {
       title: 'Total Revenue',
-      value: `$${stats.totalRevenue.toLocaleString()}`,
+      value: `Rs ${stats.totalRevenue.toLocaleString()}`,
       change: '23%',
       trend: 'up' as const,
       icon: DollarSign,
@@ -162,7 +164,7 @@ const Dashboard = () => {
                     </div>
                   </div>
                   <div className="text-right">
-                    <p className="text-sm font-bold text-slate-900">${booking.price}</p>
+                    <p className="text-sm font-bold text-slate-900">Rs {booking.price}</p>
                     <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium mt-1 ${
                       booking.status === 'Completed' ? 'bg-emerald-100 text-emerald-800' :
                       booking.status === 'In Progress' ? 'bg-blue-100 text-blue-800' :
@@ -203,7 +205,7 @@ const Dashboard = () => {
              ))}
              <div className="relative pl-10">
                 <div className="absolute left-2 top-1.5 w-4 h-4 rounded-full border-2 border-white bg-emerald-500 shadow-sm ring-2 ring-emerald-50"></div>
-                <p className="text-sm font-medium text-slate-800">Payment received $150</p>
+                <p className="text-sm font-medium text-slate-800">Payment received Rs 150</p>
                 <p className="text-xs text-slate-400 mt-1">5 hours ago</p>
              </div>
           </div>
