@@ -85,6 +85,23 @@ export default function BookingScreen() {
         load();
     }, [laborerId]);
 
+    // Load customer's saved location from home screen
+    React.useEffect(() => {
+        const loadCustomerLocation = async () => {
+            try {
+                const saved = await AsyncStorage.getItem('customerLocation');
+                if (saved) {
+                    const parsed = JSON.parse(saved);
+                    if (parsed.address) setAddress(parsed.address);
+                    if (parsed.latitude && parsed.longitude) {
+                        setSelectedLocation({ latitude: parsed.latitude, longitude: parsed.longitude });
+                    }
+                }
+            } catch {}
+        };
+        loadCustomerLocation();
+    }, []);
+
     if (loadingLaborer) {
         return (
             <SafeAreaView style={styles.container}>
@@ -281,12 +298,43 @@ export default function BookingScreen() {
                 })
             });
             if (!res.ok) {
-                const txt = await res.text();
-                Alert.alert('Booking failed', txt || 'Please try again later.');
+                let errorMsg = 'Please try again later.';
+                try {
+                    const errData = await res.json();
+                    errorMsg = errData.message || errorMsg;
+                } catch {
+                    const txt = await res.text();
+                    if (txt) errorMsg = txt;
+                }
+                Alert.alert('Booking failed', errorMsg);
                 return;
             }
             const booking = await res.json();
             console.log('Booking created', booking?._id, booking?.scheduledAt);
+
+            // Upload work photos if the customer attached any
+            if (images.length > 0 && booking?._id) {
+                try {
+                    const formData = new FormData();
+                    images.forEach((uri, i) => {
+                        const filename = uri.split('/').pop() || `photo_${i}.jpg`;
+                        const ext = filename.split('.').pop()?.toLowerCase() || 'jpg';
+                        const mime = ext === 'png' ? 'image/png' : 'image/jpeg';
+                        (formData as any).append('workPhotos', { uri, name: filename, type: mime });
+                    });
+                    await fetch(`${API_URL}/api/bookings/${booking._id}/photos`, {
+                        method: 'POST',
+                        headers: {
+                            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+                            'Content-Type': 'multipart/form-data',
+                        },
+                        body: formData,
+                    });
+                } catch (photoErr) {
+                    console.warn('Work photo upload failed:', photoErr);
+                }
+            }
+
             try { addUpcoming(booking); } catch {}
             setShowSuccess(true);
             router.replace('/(customer)/(tabs)/bookings');
@@ -430,15 +478,12 @@ export default function BookingScreen() {
                     {/* Address */}
                     <View style={styles.section}>
                         <Text style={styles.sectionTitle}>Address</Text>
-                        <TouchableOpacity
-                            style={styles.addressField}
-                            onPress={handleOpenMap}
-                        >
-                            <Ionicons name="location-outline" size={20} color="#757575" style={styles.addressIcon} />
-                            <Text style={address ? styles.addressText : styles.addressPlaceholder}>
-                                {address || 'Select location from map'}
+                        <View style={[styles.addressField, { backgroundColor: '#F5F5F5' }]}>
+                            <Ionicons name="location-outline" size={20} color="#1F41BB" style={styles.addressIcon} />
+                            <Text style={address ? styles.addressText : styles.addressPlaceholder} numberOfLines={2}>
+                                {address || 'No address saved. Please set your location on the home screen.'}
                             </Text>
-                        </TouchableOpacity>
+                        </View>
                     </View>
 
                     {/* Work Photos */}

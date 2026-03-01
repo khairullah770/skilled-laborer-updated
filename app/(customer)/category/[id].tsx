@@ -1,5 +1,6 @@
 
 import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, FlatList, Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
@@ -82,10 +83,21 @@ export default function CategoryDetailsScreen() {
     }
 
     const renderItem = ({ item }: { item: BackendSubcategory }) => (
-        <TouchableOpacity style={styles.item} onPress={() => {
+        <TouchableOpacity style={styles.item} onPress={async () => {
+            // Load customer location for automatic nearest sorting
+            let customerLat = '';
+            let customerLng = '';
+            try {
+                const saved = await AsyncStorage.getItem('customerLocation');
+                if (saved) {
+                    const loc = JSON.parse(saved);
+                    customerLat = String(loc.latitude);
+                    customerLng = String(loc.longitude);
+                }
+            } catch {}
             router.push({
                 pathname: '/subcategory/[id]',
-                params: { id: item._id, title: item.name }
+                params: { id: item._id, title: item.name, customerLat, customerLng }
             });
         }}>
             <Text style={styles.itemText}>{item.name}</Text>

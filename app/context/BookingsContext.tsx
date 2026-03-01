@@ -139,6 +139,8 @@ export const BookingsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
 export const useBookings = () => useContext(BookingsContext);
 
+export default BookingsContext;
+
 function sortByDateAsc(list: Booking[]) {
   return [...list].sort((a: any, b: any) => new Date(a.scheduledAt).getTime() - new Date(b.scheduledAt).getTime());
 }

@@ -467,6 +467,23 @@ export default function JobDetailScreen() {
                         </View>
                     </View>
 
+                    {/* Work Photos */}
+                    {Array.isArray(booking?.workPhotos) && booking.workPhotos.length > 0 && (
+                        <View style={styles.detailSection}>
+                            <Text style={styles.detailLabel}>Work Photos</Text>
+                            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.imagesContainer}>
+                                {booking.workPhotos.map((photo: string, idx: number) => (
+                                    <Image
+                                        key={idx}
+                                        source={{ uri: `${API_URL}${photo}` }}
+                                        style={styles.detailImage}
+                                        resizeMode="cover"
+                                    />
+                                ))}
+                            </ScrollView>
+                        </View>
+                    )}
+
                 </ScrollView>
 
                 <TouchableOpacity 
