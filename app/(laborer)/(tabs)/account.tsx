@@ -130,8 +130,8 @@ export default function AccountScreen() {
                             style={styles.avatar}
                         />
                     </View>
-                    <Text style={styles.userName}>{user?.name || 'Your Name'}</Text>
-                    <Text style={styles.userEmail}>
+                    <Text numberOfLines={1} ellipsizeMode="tail" style={styles.userName}>{user?.name || 'Your Name'}</Text>
+                    <Text numberOfLines={1} ellipsizeMode="tail" style={styles.userEmail}>
                         {`${(user?.role || 'laborer').toString().toUpperCase()} • ${
                             user?.categories && user.categories.length > 0
                                 ? user.categories.map((cat: any) => typeof cat === 'object' ? cat.name : cat).join(', ')
@@ -188,6 +188,7 @@ const styles = StyleSheet.create({
     profileHeader: {
         backgroundColor: '#1F41BB',
         paddingVertical: 40,
+        paddingHorizontal: 20,
         alignItems: 'center',
         borderBottomLeftRadius: 35,
         borderBottomRightRadius: 35,
@@ -240,6 +241,7 @@ const styles = StyleSheet.create({
     menuItemLeft: {
         flexDirection: 'row',
         alignItems: 'center',
+        flex: 1,
     },
     menuItemRight: {
         flexDirection: 'row',

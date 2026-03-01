@@ -10,18 +10,18 @@ import { useSocket } from '../../../context/SocketContext';
 interface ChatItem {
     _id: string;
     booking: { _id: string; service: string; status: string };
-    customer: { _id: string; name: string; profileImage?: string };
+    customer: { _id: string; name: string; firstName?: string; lastName?: string; profileImage?: string };
     laborer: { _id: string; name: string; profileImage?: string };
     lastMessage?: {
         text: string;
         senderRole: string;
         createdAt: string;
     };
-    unreadCustomer: number;
+    unreadLaborer: number;
     updatedAt: string;
 }
 
-export default function ChatInboxScreen() {
+export default function LaborerChatInbox() {
     const router = useRouter();
     const { refreshUnread } = useSocket();
     const [chats, setChats] = useState<ChatItem[]>([]);
@@ -69,11 +69,13 @@ export default function ChatInboxScreen() {
     };
 
     const renderChat = ({ item }: { item: ChatItem }) => {
-        const laborerName = item.laborer?.name || 'Laborer';
-        const laborerImg = item.laborer?.profileImage
-            ? `${API_URL}${item.laborer.profileImage}`
+        const customerName = item.customer?.name ||
+            `${item.customer?.firstName || ''} ${item.customer?.lastName || ''}`.trim() ||
+            'Customer';
+        const customerImg = item.customer?.profileImage
+            ? `${API_URL}${item.customer.profileImage}`
             : null;
-        const unread = item.unreadCustomer || 0;
+        const unread = item.unreadLaborer || 0;
         const lastMsg = item.lastMessage;
 
         return (
@@ -83,28 +85,28 @@ export default function ChatInboxScreen() {
                 onPress={() => {
                     const bId = item.booking?._id || item._id;
                     const cId = item._id;
-                    const n = encodeURIComponent(laborerName);
-                    router.push(`/(customer)/conversation/${bId}?bookingId=${bId}&chatId=${cId}&name=${n}` as any);
+                    const n = encodeURIComponent(customerName);
+                    router.push(`/(laborer)/conversation/${bId}?bookingId=${bId}&chatId=${cId}&name=${n}` as any);
                 }}
             >
-                {laborerImg ? (
-                    <Image source={{ uri: laborerImg }} style={styles.avatar} />
+                {customerImg ? (
+                    <Image source={{ uri: customerImg }} style={styles.avatar} />
                 ) : (
                     <View style={[styles.avatar, styles.avatarPlaceholder]}>
-                        <Text style={styles.avatarText}>{laborerName.charAt(0).toUpperCase()}</Text>
+                        <Text style={styles.avatarText}>{customerName.charAt(0).toUpperCase()}</Text>
                     </View>
                 )}
                 <View style={styles.chatContent}>
                     <View style={styles.chatHeader}>
                         <Text style={[styles.chatName, unread > 0 && styles.chatNameUnread]} numberOfLines={1}>
-                            {laborerName}
+                            {customerName}
                         </Text>
                         <Text style={[styles.chatTime, unread > 0 && styles.chatTimeUnread]}>
                             {lastMsg?.createdAt ? formatTime(lastMsg.createdAt) : ''}
                         </Text>
                     </View>
                     <View style={styles.chatBottom}>
-                        <Text style={[styles.chatService]} numberOfLines={1}>
+                        <Text style={styles.chatService} numberOfLines={1}>
                             {item.booking?.service || 'Service'}
                         </Text>
                     </View>
@@ -114,7 +116,7 @@ export default function ChatInboxScreen() {
                             numberOfLines={1}
                         >
                             {lastMsg
-                                ? `${lastMsg.senderRole === 'customer' ? 'You: ' : ''}${lastMsg.text}`
+                                ? `${lastMsg.senderRole === 'laborer' ? 'You: ' : ''}${lastMsg.text}`
                                 : 'No messages yet'}
                         </Text>
                         {unread > 0 && (
@@ -143,7 +145,7 @@ export default function ChatInboxScreen() {
                     <Ionicons name="chatbubbles-outline" size={64} color="#C7D2FE" />
                     <Text style={styles.emptyTitle}>No Conversations</Text>
                     <Text style={styles.emptySubtitle}>
-                        Your chats with laborers will appear here once a booking is accepted.
+                        Your chats with customers will appear here once you accept a booking.
                     </Text>
                 </View>
             ) : (

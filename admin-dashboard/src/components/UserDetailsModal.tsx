@@ -1,16 +1,17 @@
 import { saveAs } from 'file-saver';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { Briefcase, Calendar, Check, Download, FileText, Mail, MapPin, Phone, Printer, Shield, Star, X } from 'lucide-react';
+import { AlertTriangle, Briefcase, Calendar, Check, Download, FileText, Lock, Mail, MapPin, Phone, Printer, Shield, ShieldAlert, ShieldOff, Star, Unlock, X } from 'lucide-react';
 import React, { useEffect, useState } from 'react';
 import * as XLSX from 'xlsx';
-import { BASE_URL, fetchUserById } from '../api';
+import { BASE_URL, fetchUserById, laborerAccountAction } from '../api';
 
 interface UserDetailsModalProps {
   isOpen: boolean;
   onClose: () => void;
   userId: string | null;
   onStatusUpdate?: (id: string, status: 'approved' | 'rejected') => void;
+  onAccountAction?: () => void;
 }
 
 interface VerificationHistory {
@@ -37,6 +38,7 @@ interface User {
   phone?: string;
   role: string;
   status: string;
+  accountStatus?: 'active' | 'warned' | 'temp_blocked' | 'perm_blocked';
   category?: { _id: string; name: string } | string;
   categories?: { _id: string; name: string }[] | string[];
   experience?: string;
@@ -46,16 +48,31 @@ interface User {
   idCardImage?: string;
   rating?: number;
   completedJobs?: number;
+  warnings?: {
+    reason: string;
+    ratingAtTime?: number;
+    completedJobsAtTime?: number;
+    createdAt: string;
+  }[];
+  blockInfo?: {
+    type?: string;
+    reason?: string;
+    blockedAt?: string;
+    unblockedAt?: string;
+    ratingAtTime?: number;
+    completedJobsAtTime?: number;
+  };
   verificationHistory?: VerificationHistory[];
   createdAt: string;
   updatedAt: string;
   isPendingReview?: boolean;
 }
 
-const UserDetailsModal: React.FC<UserDetailsModalProps> = ({ isOpen, onClose, userId, onStatusUpdate }) => {
+const UserDetailsModal: React.FC<UserDetailsModalProps> = ({ isOpen, onClose, userId, onStatusUpdate, onAccountAction }) => {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [actionLoading, setActionLoading] = useState(false);
 
   useEffect(() => {
     if (isOpen && userId) {
@@ -78,14 +95,29 @@ const UserDetailsModal: React.FC<UserDetailsModalProps> = ({ isOpen, onClose, us
           .find((h: any) => h.status === 'pending' && h.submittedData);
         
         if (lastPending && lastPending.submittedData) {
+          const sd = lastPending.submittedData;
+          // For categories, prefer the populated data from the API response (data.categories has full objects with names)
+          // sd.categories only contains raw IDs from the submission
           const mergedData = {
             ...data,
-            ...lastPending.submittedData,
+            name: sd.name || data.name || data.email || 'Unknown',
+            email: sd.email || data.email,
+            phone: sd.phone || data.phone,
+            dob: sd.dob || data.dob,
+            address: sd.address || data.address,
+            experience: sd.experience || data.experience,
+            profileImage: sd.profileImage || data.profileImage,
+            idCardImage: sd.idCardImage || data.idCardImage,
             isPendingReview: true
           };
           setUser(mergedData);
           return;
         }
+      }
+      
+      // Handle empty name fallback
+      if (!data.name || !data.name.trim()) {
+        data.name = data.email || 'Unknown';
       }
       
       setUser(data);
@@ -205,6 +237,56 @@ const UserDetailsModal: React.FC<UserDetailsModalProps> = ({ isOpen, onClose, us
     saveAs(data, `${user.name.replace(/\s+/g, '_')}_details.xlsx`);
   };
 
+  const handleAccountAction = async (action: 'warning' | 'temp_block' | 'perm_block' | 'unblock') => {
+    if (!user) return;
+    
+    const actionLabels: Record<string, string> = {
+      warning: 'Issue Warning',
+      temp_block: 'Temporarily Block',
+      perm_block: 'Permanently Block',
+      unblock: 'Unblock',
+    };
+
+    const reason = window.prompt(`Enter reason for "${actionLabels[action]}":`);
+    if (!reason || !reason.trim()) return;
+
+    if (!window.confirm(`Are you sure you want to ${actionLabels[action].toLowerCase()} this laborer?\n\nReason: ${reason}`)) return;
+
+    try {
+      setActionLoading(true);
+      await laborerAccountAction(user._id, action, reason.trim());
+      alert(`${actionLabels[action]} action performed successfully.`);
+      // Reload user details
+      await loadUserDetails(user._id);
+      onAccountAction?.();
+    } catch (err: any) {
+      alert(err?.message || 'Failed to perform action');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const getRatingRecommendation = (rating: number, completedJobs: number) => {
+    if (completedJobs < 10) return null; // No action if less than 10 services
+    if (rating < 3.5) return { level: 'perm_block', label: 'Permanent Block Recommended', color: 'rose', description: 'Rating is below 3.5 — consistent poor performance. Consider permanent block.' };
+    if (rating < 3.8) return { level: 'temp_block', label: 'Temporary Block Recommended', color: 'orange', description: 'Rating is below 3.8 — performance needs improvement. Consider temporary block.' };
+    if (rating < 4.2) return { level: 'warning', label: 'Warning Recommended', color: 'amber', description: 'Rating is below 4.2 — performance is slipping. Consider issuing a warning.' };
+    return { level: 'good', label: 'Good Standing', color: 'emerald', description: 'Rating is 4.2 or above. Laborer is performing well.' };
+  };
+
+  const getAccountStatusBadge = (accountStatus?: string) => {
+    switch (accountStatus) {
+      case 'warned':
+        return <span className="px-2.5 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-800 flex items-center gap-1"><AlertTriangle className="w-3 h-3" /> Warned</span>;
+      case 'temp_blocked':
+        return <span className="px-2.5 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800 flex items-center gap-1"><Lock className="w-3 h-3" /> Temp Blocked</span>;
+      case 'perm_blocked':
+        return <span className="px-2.5 py-0.5 rounded-full text-xs font-medium bg-rose-100 text-rose-800 flex items-center gap-1"><ShieldOff className="w-3 h-3" /> Perm Blocked</span>;
+      default:
+        return <span className="px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800 flex items-center gap-1"><Shield className="w-3 h-3" /> Active</span>;
+    }
+  };
+
   if (!isOpen) return null;
 
   return (
@@ -277,7 +359,7 @@ const UserDetailsModal: React.FC<UserDetailsModalProps> = ({ isOpen, onClose, us
                             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                                 <div>
                                     <h1 className="text-2xl font-bold text-slate-900">{user.name}</h1>
-                                    <div className="flex items-center gap-2 mt-1">
+                                    <div className="flex items-center gap-2 mt-1 flex-wrap">
                                         <span className="px-2.5 py-0.5 rounded-full text-xs font-medium bg-indigo-100 text-indigo-800 uppercase tracking-wide">
                                             {user.role}
                                         </span>
@@ -288,6 +370,7 @@ const UserDetailsModal: React.FC<UserDetailsModalProps> = ({ isOpen, onClose, us
                                         }`}>
                                             {user.status}
                                         </span>
+                                        {user.role === 'laborer' && user.status === 'approved' && getAccountStatusBadge(user.accountStatus)}
                                     </div>
                                 </div>
                                 <div className="text-right">
@@ -371,6 +454,211 @@ const UserDetailsModal: React.FC<UserDetailsModalProps> = ({ isOpen, onClose, us
                             </div>
                         </div>
                     </div>
+
+                    {/* Rating-Based Management Panel */}
+                    {user.role === 'laborer' && user.status === 'approved' && (() => {
+                        const rating = user.rating || 0;
+                        const jobs = user.completedJobs || 0;
+                        const recommendation = getRatingRecommendation(rating, jobs);
+                        const isBlocked = user.accountStatus === 'temp_blocked' || user.accountStatus === 'perm_blocked';
+
+                        return (
+                        <div>
+                            <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center">
+                                <ShieldAlert className="w-5 h-5 mr-2 text-indigo-600" />
+                                Rating Management
+                            </h3>
+                            <div className="bg-slate-50 rounded-xl p-5 border border-slate-100 space-y-5">
+                                {/* Current Status */}
+                                <div className="flex items-center justify-between">
+                                    <div>
+                                        <div className="text-xs font-semibold text-slate-400 uppercase">Account Status</div>
+                                        <div className="mt-1">{getAccountStatusBadge(user.accountStatus)}</div>
+                                    </div>
+                                    <div className="text-right">
+                                        <div className="text-xs font-semibold text-slate-400 uppercase">Warnings</div>
+                                        <div className="text-lg font-bold text-slate-700 mt-1">{user.warnings?.length || 0}</div>
+                                    </div>
+                                </div>
+
+                                {/* Rating Thresholds */}
+                                <div className="bg-white rounded-lg p-4 border border-slate-200">
+                                    <div className="text-xs font-semibold text-slate-500 uppercase mb-3">Rating Thresholds (min 10 completed jobs)</div>
+                                    <div className="space-y-2">
+                                        <div className="flex items-center justify-between">
+                                            <span className="text-sm text-slate-600 flex items-center gap-2">
+                                                <span className="w-2 h-2 rounded-full bg-amber-400"></span> Warning
+                                            </span>
+                                            <span className="text-sm font-mono font-medium text-slate-700">Below 4.2</span>
+                                        </div>
+                                        <div className="flex items-center justify-between">
+                                            <span className="text-sm text-slate-600 flex items-center gap-2">
+                                                <span className="w-2 h-2 rounded-full bg-orange-400"></span> Temporary Block
+                                            </span>
+                                            <span className="text-sm font-mono font-medium text-slate-700">Below 3.8</span>
+                                        </div>
+                                        <div className="flex items-center justify-between">
+                                            <span className="text-sm text-slate-600 flex items-center gap-2">
+                                                <span className="w-2 h-2 rounded-full bg-rose-400"></span> Permanent Block
+                                            </span>
+                                            <span className="text-sm font-mono font-medium text-slate-700">Below 3.5</span>
+                                        </div>
+                                    </div>
+
+                                    {/* Visual rating bar */}
+                                    <div className="mt-4 pt-3 border-t border-slate-100">
+                                        <div className="flex items-center justify-between mb-1">
+                                            <span className="text-xs text-slate-500">Current Rating</span>
+                                            <span className={`text-sm font-bold ${
+                                                rating >= 4.2 ? 'text-emerald-600' :
+                                                rating >= 3.8 ? 'text-amber-600' :
+                                                rating >= 3.5 ? 'text-orange-600' :
+                                                'text-rose-600'
+                                            }`}>{rating.toFixed(1)} / 5.0</span>
+                                        </div>
+                                        <div className="w-full bg-slate-200 rounded-full h-2.5">
+                                            <div
+                                                className={`h-2.5 rounded-full transition-all ${
+                                                    rating >= 4.2 ? 'bg-emerald-500' :
+                                                    rating >= 3.8 ? 'bg-amber-500' :
+                                                    rating >= 3.5 ? 'bg-orange-500' :
+                                                    'bg-rose-500'
+                                                }`}
+                                                style={{ width: `${(rating / 5) * 100}%` }}
+                                            ></div>
+                                        </div>
+                                        <div className="flex justify-between mt-1 text-[10px] text-slate-400">
+                                            <span>0</span>
+                                            <span className="text-rose-400">3.5</span>
+                                            <span className="text-orange-400">3.8</span>
+                                            <span className="text-amber-400">4.2</span>
+                                            <span>5.0</span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Recommendation */}
+                                {recommendation ? (
+                                    <div className={`rounded-lg p-4 border ${
+                                        recommendation.level === 'good' ? 'bg-emerald-50 border-emerald-200' :
+                                        recommendation.level === 'warning' ? 'bg-amber-50 border-amber-200' :
+                                        recommendation.level === 'temp_block' ? 'bg-orange-50 border-orange-200' :
+                                        'bg-rose-50 border-rose-200'
+                                    }`}>
+                                        <div className="flex items-center gap-2 mb-1">
+                                            {recommendation.level === 'good' ? (
+                                                <Shield className="w-4 h-4 text-emerald-600" />
+                                            ) : (
+                                                <AlertTriangle className={`w-4 h-4 ${
+                                                    recommendation.level === 'warning' ? 'text-amber-600' :
+                                                    recommendation.level === 'temp_block' ? 'text-orange-600' :
+                                                    'text-rose-600'
+                                                }`} />
+                                            )}
+                                            <span className={`text-sm font-bold ${
+                                                recommendation.level === 'good' ? 'text-emerald-800' :
+                                                recommendation.level === 'warning' ? 'text-amber-800' :
+                                                recommendation.level === 'temp_block' ? 'text-orange-800' :
+                                                'text-rose-800'
+                                            }`}>
+                                                {recommendation.label}
+                                            </span>
+                                        </div>
+                                        <p className={`text-sm ${
+                                            recommendation.level === 'good' ? 'text-emerald-700' :
+                                            recommendation.level === 'warning' ? 'text-amber-700' :
+                                            recommendation.level === 'temp_block' ? 'text-orange-700' :
+                                            'text-rose-700'
+                                        }`}>
+                                            {recommendation.description}
+                                        </p>
+                                    </div>
+                                ) : (
+                                    <div className="rounded-lg p-4 border bg-slate-100 border-slate-200">
+                                        <p className="text-sm text-slate-600">
+                                            <span className="font-medium">No action needed.</span> This laborer has completed fewer than 10 jobs ({jobs} jobs). Rating management actions are available after 10 completed services.
+                                        </p>
+                                    </div>
+                                )}
+
+                                {/* Action Buttons */}
+                                <div className="pt-2">
+                                    <div className="text-xs font-semibold text-slate-400 uppercase mb-3">Admin Actions</div>
+                                    
+                                    {isBlocked ? (
+                                        <div className="space-y-3">
+                                            {user.blockInfo && (
+                                                <div className="bg-white rounded-lg p-3 border border-slate-200 text-sm">
+                                                    <div className="text-slate-500">Block Type: <span className="font-medium text-slate-700 capitalize">{user.blockInfo.type}</span></div>
+                                                    <div className="text-slate-500 mt-1">Reason: <span className="font-medium text-slate-700">{user.blockInfo.reason}</span></div>
+                                                    {user.blockInfo.blockedAt && (
+                                                        <div className="text-slate-500 mt-1">Blocked on: <span className="font-medium text-slate-700">{new Date(user.blockInfo.blockedAt).toLocaleString()}</span></div>
+                                                    )}
+                                                </div>
+                                            )}
+                                            <button
+                                                onClick={() => handleAccountAction('unblock')}
+                                                disabled={actionLoading}
+                                                className="w-full flex items-center justify-center py-2.5 px-4 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors text-sm font-medium disabled:opacity-50"
+                                            >
+                                                <Unlock className="w-4 h-4 mr-2" />
+                                                {actionLoading ? 'Processing...' : 'Unblock Laborer'}
+                                            </button>
+                                        </div>
+                                    ) : (
+                                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                            <button
+                                                onClick={() => handleAccountAction('warning')}
+                                                disabled={actionLoading || jobs < 10}
+                                                className="flex items-center justify-center py-2.5 px-3 bg-amber-500 text-white rounded-lg hover:bg-amber-600 transition-colors text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed"
+                                                title={jobs < 10 ? 'Requires at least 10 completed jobs' : 'Issue a warning'}
+                                            >
+                                                <AlertTriangle className="w-4 h-4 mr-1.5" />
+                                                {actionLoading ? '...' : 'Warn'}
+                                            </button>
+                                            <button
+                                                onClick={() => handleAccountAction('temp_block')}
+                                                disabled={actionLoading || jobs < 10}
+                                                className="flex items-center justify-center py-2.5 px-3 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed"
+                                                title={jobs < 10 ? 'Requires at least 10 completed jobs' : 'Temporarily block'}
+                                            >
+                                                <Lock className="w-4 h-4 mr-1.5" />
+                                                {actionLoading ? '...' : 'Temp Block'}
+                                            </button>
+                                            <button
+                                                onClick={() => handleAccountAction('perm_block')}
+                                                disabled={actionLoading || jobs < 10}
+                                                className="flex items-center justify-center py-2.5 px-3 bg-rose-600 text-white rounded-lg hover:bg-rose-700 transition-colors text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed"
+                                                title={jobs < 10 ? 'Requires at least 10 completed jobs' : 'Permanently block'}
+                                            >
+                                                <ShieldOff className="w-4 h-4 mr-1.5" />
+                                                {actionLoading ? '...' : 'Perm Block'}
+                                            </button>
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* Warning History */}
+                                {user.warnings && user.warnings.length > 0 && (
+                                    <div className="pt-2">
+                                        <div className="text-xs font-semibold text-slate-400 uppercase mb-2">Warning History</div>
+                                        <div className="space-y-2 max-h-40 overflow-y-auto">
+                                            {user.warnings.map((w, idx) => (
+                                                <div key={idx} className="bg-white rounded-lg p-3 border border-slate-200 text-sm">
+                                                    <div className="flex items-center justify-between">
+                                                        <span className="text-slate-500 text-xs">{new Date(w.createdAt).toLocaleString()}</span>
+                                                        <span className="text-xs text-slate-400">Rating: {w.ratingAtTime?.toFixed(1) || '—'} | Jobs: {w.completedJobsAtTime ?? '—'}</span>
+                                                    </div>
+                                                    <div className="text-slate-700 mt-1">{w.reason}</div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                        );
+                    })()}
 
                     {/* Documents */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-8">

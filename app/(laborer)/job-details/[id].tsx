@@ -12,7 +12,7 @@ export default function JobDetailScreen() {
   const { id } = useLocalSearchParams();
   const router = useRouter();
 
-  const [status, setStatus] = useState<'pending' | 'accepted' | 'in_progress' | 'completed'>('pending');
+  const [status, setStatus] = useState<'pending' | 'accepted' | 'in_progress' | 'completed' | 'cancelled'>('pending');
   const [detailsModalVisible, setDetailsModalVisible] = useState(false);
   const [booking, setBooking] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
@@ -34,6 +34,12 @@ export default function JobDetailScreen() {
           headers: token ? { Authorization: `Bearer ${token}` } : {},
         });
         if (!res.ok) {
+          if (res.status === 404) {
+            setStatus('cancelled');
+            setBooking(null);
+            setLoading(false);
+            return;
+          }
           const txt = await res.text();
           setError(txt || 'Failed to load job details.');
           setLoading(false);
@@ -262,22 +268,15 @@ export default function JobDetailScreen() {
       Alert.alert('No phone number', 'Customer phone number is not available.');
       return;
     }
-    const digits = raw.replace(/[^\d]/g, '');
+    const digits = raw.replace(/[^\d+]/g, '');
     if (!digits) {
       Alert.alert('Invalid phone', 'Customer phone number is invalid.');
       return;
     }
-    const waUrl = `whatsapp://send?phone=${digits}`;
     try {
-      const supported = await Linking.canOpenURL(waUrl);
-      if (supported) {
-        await Linking.openURL(waUrl);
-        return;
-      }
-      const webUrl = `https://wa.me/${digits}`;
-      await Linking.openURL(webUrl);
+      await Linking.openURL(`tel:${digits}`);
     } catch {
-      Alert.alert('Error', 'Unable to open WhatsApp.');
+      Alert.alert('Error', 'Unable to make a call.');
     }
   };
 
@@ -308,6 +307,16 @@ export default function JobDetailScreen() {
             <Text style={styles.retryText}>Go back</Text>
           </TouchableOpacity>
         </View>
+      ) : !booking && status === 'cancelled' ? (
+        <View style={styles.errorContainer}>
+          <View style={{ backgroundColor: '#FEE2E2', paddingHorizontal: 16, paddingVertical: 10, borderRadius: 12, marginBottom: 16 }}>
+            <Text style={{ color: '#DC2626', fontSize: 18, fontWeight: 'bold', textAlign: 'center' }}>Cancelled</Text>
+          </View>
+          <Text style={[styles.errorText, { color: '#6B7280' }]}>This booking was cancelled by the customer before it was approved.</Text>
+          <TouchableOpacity style={styles.retryButton} onPress={() => router.back()}>
+            <Text style={styles.retryText}>Go back</Text>
+          </TouchableOpacity>
+        </View>
       ) : !booking ? (
         <View style={styles.errorContainer}>
           <Text style={styles.errorText}>Job not found.</Text>
@@ -327,18 +336,29 @@ export default function JobDetailScreen() {
             style={styles.avatar}
           />
           <View style={styles.customerInfo}>
-            <Text style={styles.customerName}>{customer?.name || 'Customer'}</Text>
+            <Text numberOfLines={1} ellipsizeMode="tail" style={styles.customerName}>{customer?.name || 'Customer'}</Text>
             <Text style={styles.dateText}>{formattedDate}</Text>
             <Text style={styles.dateText}>{formattedTime}</Text>
           </View>
           <View style={styles.contactIcons}>
-            <TouchableOpacity style={styles.iconButton} onPress={handleOpenWhatsApp} activeOpacity={0.7}>
+            {isAccepted && !isCompleted && (
+              <TouchableOpacity style={styles.iconButton} onPress={handleOpenWhatsApp} activeOpacity={0.7}>
                 <Ionicons name="call" size={20} color="#fff" />
-            </TouchableOpacity>
-            {isAccepted && (
-                 <TouchableOpacity style={[styles.iconButton, styles.chatButton]}>
-                    <Ionicons name="chatbubble" size={20} color="#fff" />
-                </TouchableOpacity>
+              </TouchableOpacity>
+            )}
+            {isAccepted && !isCompleted && (
+              <TouchableOpacity
+                style={[styles.iconButton, styles.chatButton]}
+                activeOpacity={0.7}
+                onPress={() => {
+                  router.push({
+                    pathname: '/(laborer)/conversation/[id]',
+                    params: { id: String(id), bookingId: String(id), name: customer?.name || 'Customer' },
+                  } as any);
+                }}
+              >
+                <Ionicons name="chatbubble" size={20} color="#fff" />
+              </TouchableOpacity>
             )}
           </View>
         </View>
@@ -350,6 +370,28 @@ export default function JobDetailScreen() {
               <Ionicons name="location" size={24} color="#1F2937" />
             </TouchableOpacity>
         </View>
+
+        {/* Service & Price Info */}
+        <View style={styles.serviceInfoContainer}>
+          <View style={styles.serviceInfoRow}>
+            <Ionicons name="construct-outline" size={20} color="#6B7280" />
+            <Text style={styles.serviceInfoLabel}>Service</Text>
+            <Text style={styles.serviceInfoValue}>{category || 'N/A'}</Text>
+          </View>
+          <View style={styles.serviceInfoDivider} />
+          <View style={styles.serviceInfoRow}>
+            <Ionicons name="cash-outline" size={20} color="#6B7280" />
+            <Text style={styles.serviceInfoLabel}>Total Price</Text>
+            <Text style={styles.serviceInfoPrice}>Rs. {booking?.compensation ?? booking?.price ?? '—'}</Text>
+          </View>
+        </View>
+
+        {/* Cancelled Banner */}
+        {status === 'cancelled' && (
+             <View style={[styles.statusBanner, { backgroundColor: '#FEE2E2' }]}>
+                <Text style={[styles.statusBannerText, { color: '#DC2626' }]}>Cancelled</Text>
+             </View>
+        )}
 
         {/* View Details Button (Only in pending state per image 1) */}
         {status === 'pending' && (
@@ -373,7 +415,8 @@ export default function JobDetailScreen() {
              </View>
         )}
 
-        {/* Action Buttons */}
+        {/* Action Buttons - hidden for cancelled bookings */}
+        {status !== 'cancelled' && (
         <View style={styles.actionButtonsContainer}>
             {status === 'pending' && (
                 <>
@@ -405,6 +448,7 @@ export default function JobDetailScreen() {
             )}
              {/* No buttons for completed state */}
         </View>
+        )}
 
         {/* Stepper */}
         <View style={styles.stepperContainer}>
@@ -502,7 +546,7 @@ export default function JobDetailScreen() {
   );
 }
 
-const normalizeStatus = (status: string): 'pending' | 'accepted' | 'in_progress' | 'completed' => {
+const normalizeStatus = (status: string): 'pending' | 'accepted' | 'in_progress' | 'completed' | 'cancelled' => {
   const s = (status || '').toLowerCase();
   if (s === 'pending' || s === 'waiting for laborer approval' || s === 'waiting_for_laborer_approval' || s === 'waiting for approval') {
     return 'pending';
@@ -510,6 +554,7 @@ const normalizeStatus = (status: string): 'pending' | 'accepted' | 'in_progress'
   if (s === 'accepted') return 'accepted';
   if (s === 'in progress' || s === 'in_progress') return 'in_progress';
   if (s === 'completed') return 'completed';
+  if (s === 'cancelled' || s === 'declined') return 'cancelled';
   return 'pending';
 };
 
@@ -587,6 +632,7 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     borderRadius: 6,
     alignSelf: 'flex-start',
+    maxWidth: '100%',
   },
   categoryText: {
     color: '#1F2937',
@@ -600,6 +646,7 @@ const styles = StyleSheet.create({
     marginLeft: 8,
     color: '#6B7280',
     fontSize: 15,
+    flex: 1,
   },
   imagesContainer: {
     flexDirection: 'row',
@@ -687,6 +734,41 @@ const styles = StyleSheet.create({
       flex: 1,
       fontSize: 16,
       color: '#4B5563',
+  },
+  serviceInfoContainer: {
+      backgroundColor: '#F9FAFB',
+      borderRadius: 12,
+      padding: 16,
+      marginBottom: 20,
+      borderWidth: 1,
+      borderColor: '#E5E7EB',
+  },
+  serviceInfoRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+  },
+  serviceInfoLabel: {
+      fontSize: 15,
+      color: '#6B7280',
+      marginLeft: 8,
+      flex: 1,
+  },
+  serviceInfoValue: {
+      fontSize: 15,
+      fontWeight: '600',
+      color: '#1F2937',
+      flexShrink: 1,
+      textAlign: 'right',
+  },
+  serviceInfoPrice: {
+      fontSize: 16,
+      fontWeight: '700',
+      color: '#1E40AF',
+  },
+  serviceInfoDivider: {
+      height: 1,
+      backgroundColor: '#E5E7EB',
+      marginVertical: 12,
   },
   viewDetailsButton: {
       backgroundColor: '#1E40AF', // Dark blue

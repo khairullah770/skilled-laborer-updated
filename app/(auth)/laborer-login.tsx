@@ -157,7 +157,7 @@ export default function LaborerLoginScreen() {
                             />
                         </View>
 
-                        <Text style={styles.welcomeText}>Welcome Skilled Laborer</Text>
+                        <Text style={styles.welcomeText}>Welcome back</Text>
 
                         <View style={styles.form}>
                             {/* Method Toggle */}
@@ -282,7 +282,7 @@ const styles = StyleSheet.create({
     },
     logoSection: {
         alignItems: 'center',
-        marginBottom: 20,
+        marginBottom: 30,
     },
     logo: {
         width: 180,
@@ -290,10 +290,11 @@ const styles = StyleSheet.create({
     },
     welcomeText: {
         fontSize: 24,
-        fontWeight: '700',
+        fontWeight: 'bold',
         color: '#1F41BB',
         textAlign: 'center',
-        marginBottom: 18,
+        marginBottom: 28,
+        width: '100%',
     },
     socialRow: {
         flexDirection: 'row',

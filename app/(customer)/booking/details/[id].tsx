@@ -124,28 +124,23 @@ export default function BookingDetailsScreen() {
         }
         const raw = booking.laborer.phone.toString();
         const phone = raw.replace(/[^\d+]/g, '');
-        const url = `whatsapp://send?phone=${phone}`;
         try {
-            const supported = await Linking.canOpenURL(url);
-            if (supported) {
-                await Linking.openURL(url);
-            } else {
-                Alert.alert('WhatsApp not installed', 'Please install WhatsApp to contact the laborer.');
-            }
+            await Linking.openURL(`tel:${phone}`);
         } catch {
-            Alert.alert('Error', 'Unable to open WhatsApp.');
+            Alert.alert('Error', 'Unable to make a call.');
         }
     };
 
     const statusNorm = (booking?.status || '').toString().toLowerCase();
     const isAccepted = statusNorm === 'accepted';
+    const isInProgress = statusNorm === 'in progress';
     const isCompleted = statusNorm === 'completed';
     const hasExistingRating = !!booking?.myRating;
 
     const steps = [
-        { title: 'Job Accepted', key: 'Accepted' },
-        { title: 'Job In progress', key: 'In Progress' },
-        { title: 'Job Completed', key: 'Completed' }
+        { title: 'Booking Accepted', key: 'Accepted' },
+        { title: 'Booking In progress', key: 'In Progress' },
+        { title: 'Booking Completed', key: 'Completed' }
     ];
 
     const handleSubmitRating = async () => {
@@ -245,7 +240,7 @@ export default function BookingDetailsScreen() {
                             <Text style={[styles.rateText, { color: '#1F41BB' }]}>{`Rs ${booking.compensation}`}</Text>
                         </View>
                         <View style={styles.actionIcons}>
-                            {(isAccepted || isCompleted) ? (
+                            {(isAccepted || isInProgress) ? (
                                 <>
                                     <TouchableOpacity
                                         style={[styles.iconCircle, { backgroundColor: '#EBF0FF' }]}
@@ -255,7 +250,11 @@ export default function BookingDetailsScreen() {
                                     </TouchableOpacity>
                                     <TouchableOpacity
                                         style={[styles.iconCircle, { backgroundColor: '#EBF0FF' }]}
-                                        onPress={openWhatsApp}
+                                        onPress={() => {
+                                            const bId = booking._id;
+                                            const lName = encodeURIComponent(booking.laborer?.name || 'Laborer');
+                                            router.push(`/(customer)/conversation/${bId}?bookingId=${bId}&name=${lName}` as any);
+                                        }}
                                     >
                                         <Ionicons name="chatbubble-ellipses" size={22} color="#1F41BB" />
                                     </TouchableOpacity>
@@ -270,11 +269,15 @@ export default function BookingDetailsScreen() {
 
                     {isAccepted ? (
                         <View style={styles.acceptedBadgeContainer}>
-                            <Text style={styles.acceptedBadgeText}>Accepted</Text>
+                            <Text style={styles.acceptedBadgeText}>Booking Accepted</Text>
+                        </View>
+                    ) : isInProgress ? (
+                        <View style={[styles.acceptedBadgeContainer, { backgroundColor: '#FFFFFF' }]}>
+                            <Text style={[styles.acceptedBadgeText, { color: '#164EA3' }]}>In Progress</Text>
                         </View>
                     ) : isCompleted ? (
                         <View style={styles.acceptedBadgeContainer}>
-                            <Text style={styles.acceptedBadgeText}>Job Completed</Text>
+                            <Text style={styles.acceptedBadgeText}>Booking Completed</Text>
                         </View>
                     ) : (
                         <View style={styles.buttonRow}>
@@ -368,20 +371,46 @@ export default function BookingDetailsScreen() {
                         <View style={styles.ratingSection}>
                             <Text style={[styles.ratingTitle, { color: colors.text }]}>Rate your experience</Text>
                             <View style={styles.ratingStarsRow}>
-                                {[1, 2, 3, 4, 5].map((star) => (
-                                    <TouchableOpacity
-                                        key={star}
-                                        onPress={() => setRatingValue(star)}
-                                        activeOpacity={0.7}
-                                        style={styles.ratingStarButton}
-                                    >
-                                        <Ionicons
-                                            name={star <= ratingValue ? 'star' : 'star-outline'}
-                                            size={32}
-                                            color={star <= ratingValue ? '#FBBF24' : '#D1D5DB'}
-                                        />
-                                    </TouchableOpacity>
-                                ))}
+                                {[1, 2, 3, 4, 5].map((star) => {
+                                    const fill = ratingValue - (star - 1);
+                                    const isFull = fill >= 0.75;
+                                    const isHalf = !isFull && fill >= 0.25;
+                                    return (
+                                        <TouchableOpacity
+                                            key={star}
+                                            onPress={() => setRatingValue(star)}
+                                            activeOpacity={0.7}
+                                            style={[styles.ratingStarButton, { width: 38, height: 38 }]}
+                                        >
+                                            <Ionicons
+                                                name={isFull ? 'star' : isHalf ? 'star-half' : 'star-outline'}
+                                                size={36}
+                                                color={isFull || isHalf ? '#FBBF24' : '#D1D5DB'}
+                                            />
+                                        </TouchableOpacity>
+                                    );
+                                })}
+                            </View>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginBottom: 12 }}>
+                                <TouchableOpacity
+                                    onPress={() => setRatingValue(Math.max(0.5, Math.round((ratingValue - 0.1) * 10) / 10))}
+                                    disabled={ratingValue <= 0.5}
+                                    activeOpacity={0.6}
+                                    style={{ padding: 6 }}
+                                >
+                                    <Ionicons name="remove-circle-outline" size={30} color={ratingValue <= 0.5 ? '#D1D5DB' : '#3B82F6'} />
+                                </TouchableOpacity>
+                                <Text style={{ fontSize: 18, fontWeight: '600', marginHorizontal: 14, color: '#374151', minWidth: 60, textAlign: 'center' }}>
+                                    {ratingValue > 0 ? ratingValue.toFixed(1) : '0.0'} / 5
+                                </Text>
+                                <TouchableOpacity
+                                    onPress={() => setRatingValue(Math.min(5, Math.round((ratingValue + 0.1) * 10) / 10))}
+                                    disabled={ratingValue >= 5}
+                                    activeOpacity={0.6}
+                                    style={{ padding: 6 }}
+                                >
+                                    <Ionicons name="add-circle-outline" size={30} color={ratingValue >= 5 ? '#D1D5DB' : '#3B82F6'} />
+                                </TouchableOpacity>
                             </View>
                             <View style={styles.ratingCommentBox}>
                                 <Text style={styles.ratingCommentLabel}>Feedback (optional)</Text>
@@ -418,7 +447,7 @@ export default function BookingDetailsScreen() {
                     )}
 
                     <View style={styles.statusSection}>
-                        <Text style={[styles.statusTitle, { color: colors.text }]}>Job Status</Text>
+                        <Text style={[styles.statusTitle, { color: colors.text }]}>Booking Status</Text>
                         <View style={styles.timelineContainer}>
                             {steps.map((s, index) => {
                                 const completed = ['Accepted', 'In Progress', 'Completed'].indexOf(booking.status) >= index;

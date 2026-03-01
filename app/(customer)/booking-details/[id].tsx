@@ -78,9 +78,9 @@ export default function BookingDetailsScreen() {
     };
 
     const jobStatus = [
-        { title: 'Job Accepted', completed: isJobAccepted || isJobCompleted },
-        { title: 'Job In progress', completed: isJobCompleted },
-        { title: 'Job Completed', completed: isJobCompleted },
+        { title: 'Booking Accepted', completed: isJobAccepted || isJobCompleted },
+        { title: 'Booking In progress', completed: isJobCompleted },
+        { title: 'Booking Completed', completed: isJobCompleted },
     ];
 
     return (
@@ -125,12 +125,16 @@ export default function BookingDetailsScreen() {
                         <Text style={[styles.rateText, { color: '#1F41BB' }]}>{`₹${laborer.hourlyRate} /hour`}</Text>
                     </View>
                     <View style={styles.actionIcons}>
-                        <TouchableOpacity style={[styles.iconCircle, { backgroundColor: '#EBF0FF' }]}>
-                            <Ionicons name="call" size={22} color="#1F41BB" />
-                        </TouchableOpacity>
-                        <TouchableOpacity style={[styles.iconCircle, { backgroundColor: '#EBF0FF' }]}>
-                            <Ionicons name="chatbubble-ellipses" size={22} color="#1F41BB" />
-                        </TouchableOpacity>
+                        {!isJobCompleted && (
+                            <>
+                                <TouchableOpacity style={[styles.iconCircle, { backgroundColor: '#EBF0FF' }]}>
+                                    <Ionicons name="call" size={22} color="#1F41BB" />
+                                </TouchableOpacity>
+                                <TouchableOpacity style={[styles.iconCircle, { backgroundColor: '#EBF0FF' }]}>
+                                    <Ionicons name="chatbubble-ellipses" size={22} color="#1F41BB" />
+                                </TouchableOpacity>
+                            </>
+                        )}
                     </View>
                 </View>
 
@@ -149,7 +153,7 @@ export default function BookingDetailsScreen() {
                             </Text>
                         </View>
                         <View style={[styles.acceptedContainer, { backgroundColor: '#E0F2F1' }]}>
-                            <Text style={[styles.acceptedText, { color: '#00695C' }]}>Job Completed</Text>
+                            <Text style={[styles.acceptedText, { color: '#00695C' }]}>Booking Completed</Text>
                         </View>
                     </View>
                 ) : !isJobAccepted ? (
@@ -169,13 +173,13 @@ export default function BookingDetailsScreen() {
                     </View>
                 ) : (
                     <View style={styles.acceptedContainer}>
-                        <Text style={styles.acceptedText}>Job Accepted</Text>
+                        <Text style={styles.acceptedText}>Booking Accepted</Text>
                     </View>
                 )}
 
                 {/* Job Status Timeline */}
                 <View style={styles.statusSection}>
-                    <Text style={[styles.statusTitle, { color: colors.text }]}>Job Status</Text>
+                    <Text style={[styles.statusTitle, { color: colors.text }]}>Booking Status</Text>
                     <View style={styles.timelineContainer}>
                         {jobStatus.map((status, index) => (
                             <View key={index} style={styles.timelineItem}>
@@ -218,7 +222,7 @@ export default function BookingDetailsScreen() {
                     style={styles.modalOverlay}
                 >
                     <View style={[styles.modalContent, { backgroundColor: colors.background }]}>
-                        <Text style={[styles.modalTitle, { color: colors.text }]}>Reschedule Job</Text>
+                        <Text style={[styles.modalTitle, { color: colors.text }]}>Reschedule Booking</Text>
                         
                         <ScrollView showsVerticalScrollIndicator={false}>
                             {/* Date Picker */}

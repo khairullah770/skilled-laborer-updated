@@ -372,9 +372,11 @@ const styles = StyleSheet.create({
         borderBottomColor: '#F3F4F6',
     },
     tab: {
+        flex: 1,
+        alignItems: 'center',
         paddingVertical: 10,
-        paddingHorizontal: 20,
-        marginHorizontal: 10,
+        paddingHorizontal: 10,
+        marginHorizontal: 5,
         borderBottomWidth: 2,
         borderBottomColor: 'transparent',
     },

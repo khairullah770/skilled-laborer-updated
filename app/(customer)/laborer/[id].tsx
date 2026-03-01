@@ -15,6 +15,7 @@ export default function LaborerProfileScreen() {
     const [profile, setProfile] = useState<any>(null);
     const [loading, setLoading] = useState(true);
     const [hasAcceptedBooking, setHasAcceptedBooking] = useState(false);
+    const [acceptedBookingId, setAcceptedBookingId] = useState<string | null>(null);
 
     useEffect(() => {
         const load = async () => {
@@ -31,6 +32,7 @@ export default function LaborerProfileScreen() {
                     if (checkRes.ok) {
                         const checkData = await checkRes.json();
                         setHasAcceptedBooking(!!checkData.hasAcceptedBooking);
+                        if (checkData.bookingId) setAcceptedBookingId(checkData.bookingId);
                     }
                 }
             } catch (e) {
@@ -129,10 +131,7 @@ export default function LaborerProfileScreen() {
                         {hasAcceptedBooking && profile.phone ? (
                             <TouchableOpacity onPress={() => {
                                 const phone = String(profile.phone).replace(/[^\d+]/g, '');
-                                const url = `whatsapp://send?phone=${phone}`;
-                                Linking.openURL(url).catch(() => {
-                                    Linking.openURL(`https://wa.me/${phone}`);
-                                });
+                                Linking.openURL(`tel:${phone}`);
                             }}>
                                 <Text style={styles.phoneText}>{profile.phone}</Text>
                             </TouchableOpacity>
@@ -144,21 +143,28 @@ export default function LaborerProfileScreen() {
                 <View style={styles.actions}>
                     {hasAcceptedBooking ? (
                         <>
-                            <TouchableOpacity style={styles.actionBtn}>
+                            <TouchableOpacity
+                                style={styles.actionBtn}
+                                onPress={() => {
+                                    if (acceptedBookingId) {
+                                        const lName = encodeURIComponent(profile.name || 'Laborer');
+                                        router.push(`/(customer)/conversation/${acceptedBookingId}?bookingId=${acceptedBookingId}&name=${lName}` as any);
+                                    }
+                                }}
+                            >
                                 <Ionicons name="chatbubble-ellipses-outline" size={20} color="#fff" />
                                 <Text style={styles.actionText}>Chat</Text>
                             </TouchableOpacity>
-                            <TouchableOpacity style={styles.actionBtn} onPress={() => {
-                                if (profile.phone) {
-                                    const phone = String(profile.phone).replace(/[^\d+]/g, '');
-                                    const url = `whatsapp://send?phone=${phone}`;
-                                    Linking.openURL(url).catch(() => {
-                                        Linking.openURL(`https://wa.me/${phone}`);
-                                    });
-                                }
-                            }}>
-                                <Ionicons name="logo-whatsapp" size={20} color="#fff" />
-                                <Text style={styles.actionText}>WhatsApp</Text>
+                            <TouchableOpacity
+                                style={styles.actionBtn}
+                                onPress={() => {
+                                    if (profile.phone) {
+                                        Linking.openURL(`tel:${String(profile.phone).replace(/[^\d+]/g, '')}`);
+                                    }
+                                }}
+                            >
+                                <Ionicons name="call-outline" size={20} color="#fff" />
+                                <Text style={styles.actionText}>Call</Text>
                             </TouchableOpacity>
                         </>
                     ) : null}

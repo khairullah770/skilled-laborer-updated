@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from 'expo-router';
 import React, { useCallback, useState } from 'react';
-import { ActivityIndicator, FlatList, RefreshControl, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, FlatList, Image, RefreshControl, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { API_URL } from '../../constants/Api';
 
@@ -40,18 +40,37 @@ export default function NotificationsScreen() {
       fetchNotifications();
   };
 
-  const renderItem = ({ item }: any) => (
+  const renderItem = ({ item }: any) => {
+    const laborerImage = item.data?.laborerProfileImage;
+    const laborerName = item.data?.laborerName;
+
+    return (
     <View style={[styles.card, !item.isRead && styles.unreadCard]}>
-        <View style={styles.iconContainer}>
-            <Ionicons name="notifications" size={24} color="#1F41BB" />
-        </View>
+        {laborerImage ? (
+          <Image
+            source={{ uri: `${API_URL}${laborerImage}` }}
+            style={styles.laborerAvatar}
+          />
+        ) : (
+          <View style={styles.iconContainer}>
+            {laborerName ? (
+              <Text style={styles.avatarInitial}>{laborerName.charAt(0).toUpperCase()}</Text>
+            ) : (
+              <Ionicons name="notifications" size={24} color="#1F41BB" />
+            )}
+          </View>
+        )}
         <View style={styles.content}>
+            {laborerName ? (
+              <Text style={styles.laborerName}>{laborerName}</Text>
+            ) : null}
             <Text style={styles.title}>{item.title}</Text>
             <Text style={styles.message}>{item.message}</Text>
             <Text style={styles.time}>{new Date(item.createdAt).toLocaleString()}</Text>
         </View>
     </View>
-  );
+    );
+  };
 
   return (
     <SafeAreaView style={styles.container}>
@@ -104,6 +123,24 @@ const styles = StyleSheet.create({
       justifyContent: 'center',
       alignItems: 'center',
       marginRight: 15
+  },
+  laborerAvatar: {
+      width: 40,
+      height: 40,
+      borderRadius: 20,
+      marginRight: 15,
+      backgroundColor: '#E5E7EB',
+  },
+  avatarInitial: {
+      fontSize: 18,
+      fontWeight: 'bold',
+      color: '#1F41BB',
+  },
+  laborerName: {
+      fontSize: 14,
+      fontWeight: '600',
+      color: '#1F41BB',
+      marginBottom: 2,
   },
   content: { flex: 1 },
   title: { fontSize: 16, fontWeight: 'bold', color: '#111827', marginBottom: 4 },

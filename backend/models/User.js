@@ -1,4 +1,4 @@
-const mongoose = require('mongoose');
+const mongoose = require("mongoose");
 
 const userSchema = mongoose.Schema(
   {
@@ -13,33 +13,60 @@ const userSchema = mongoose.Schema(
     },
     password: {
       type: String,
-      required: [true, 'Please add a password'],
+      required: [true, "Please add a password"],
     },
     role: {
       type: String,
-      enum: ['customer', 'laborer', 'admin'],
-      default: 'customer',
+      enum: ["customer", "laborer", "admin"],
+      default: "customer",
     },
     // Laborer specific fields
     category: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: 'Category',
+      ref: "Category",
       default: null,
     },
-    categories: [{
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'Category',
-      default: [],
-    }],
-    subcategories: [{
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'Subcategory',
-      default: [],
-    }],
+    categories: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Category",
+        default: [],
+      },
+    ],
+    subcategories: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Subcategory",
+        default: [],
+      },
+    ],
     status: {
       type: String,
-      enum: ['unverified', 'pending', 'approved', 'rejected'],
-      default: 'unverified', // Default status for laborers
+      enum: ["unverified", "pending", "approved", "rejected"],
+      default: "unverified", // Default status for laborers
+    },
+    accountStatus: {
+      type: String,
+      enum: ["active", "warned", "temp_blocked", "perm_blocked"],
+      default: "active",
+    },
+    warnings: [
+      {
+        reason: { type: String, required: true },
+        issuedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+        ratingAtTime: { type: Number },
+        completedJobsAtTime: { type: Number },
+        createdAt: { type: Date, default: Date.now },
+      },
+    ],
+    blockInfo: {
+      type: { type: String, enum: ["temporary", "permanent"] },
+      reason: { type: String },
+      blockedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+      blockedAt: { type: Date },
+      unblockedAt: { type: Date },
+      ratingAtTime: { type: Number },
+      completedJobsAtTime: { type: Number },
     },
     phone: {
       type: String,
@@ -47,84 +74,86 @@ const userSchema = mongoose.Schema(
       sparse: true,
     },
     experience: {
-        type: String,
-        default: ''
+      type: String,
+      default: "",
     },
     dob: {
-        type: String,
-        default: ''
+      type: String,
+      default: "",
     },
     address: {
-        type: String,
-        default: ''
+      type: String,
+      default: "",
     },
     currentLocation: {
-        latitude: { type: Number },
-        longitude: { type: Number },
-        address: { type: String }
+      latitude: { type: Number },
+      longitude: { type: Number },
+      address: { type: String },
     },
     isAvailable: {
-        type: Boolean,
-        default: true
+      type: Boolean,
+      default: true,
     },
     lastActive: {
-        type: Date,
-        default: Date.now
+      type: Date,
+      default: Date.now,
     },
     profileImage: {
-        type: String,
-        default: ''
+      type: String,
+      default: "",
     },
     idCardImage: {
-        type: String,
-        default: ''
+      type: String,
+      default: "",
     },
     rating: {
-        type: Number,
-        default: 0
+      type: Number,
+      default: 0,
     },
     notificationsEnabled: {
-        type: Boolean,
-        default: true
+      type: Boolean,
+      default: true,
     },
     completedJobs: {
-        type: Number,
-        default: 0
+      type: Number,
+      default: 0,
     },
-    verificationHistory: [{
+    verificationHistory: [
+      {
         status: {
-            type: String,
-            enum: ['pending', 'approved', 'rejected'],
-            required: true
+          type: String,
+          enum: ["pending", "approved", "rejected"],
+          required: true,
         },
         changedBy: {
-            type: mongoose.Schema.Types.ObjectId,
-            ref: 'User'
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "User",
         },
         reason: {
-            type: String
+          type: String,
         },
         // Store submitted data here so profile remains unchanged until approval
         submittedData: {
-            name: String,
-            email: String,
-            phone: String,
-            dob: String,
-            address: String,
-            experience: String,
-            categories: [String],
-            profileImage: String,
-            idCardImage: String
+          name: String,
+          email: String,
+          phone: String,
+          dob: String,
+          address: String,
+          experience: String,
+          categories: [String],
+          profileImage: String,
+          idCardImage: String,
         },
         timestamp: {
-            type: Date,
-            default: Date.now
-        }
-    }]
+          type: Date,
+          default: Date.now,
+        },
+      },
+    ],
   },
   {
     timestamps: true,
-  }
+  },
 );
 
 userSchema.index({ status: 1 }); // Index for efficient status queries
@@ -132,4 +161,4 @@ userSchema.index({ subcategories: 1 });
 userSchema.index({ isAvailable: 1 });
 userSchema.index({ lastActive: 1 });
 
-module.exports = mongoose.model('User', userSchema);
+module.exports = mongoose.model("User", userSchema);

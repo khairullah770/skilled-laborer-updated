@@ -1,4 +1,4 @@
-import { Bell, Calendar, ChevronDown, Layers, LayoutDashboard, LogOut, Menu, Search, Settings, Users } from 'lucide-react';
+import { Bell, Calendar, ChevronDown, Layers, LayoutDashboard, LogOut, Menu, Settings, Users } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { fetchDashboardStats } from '../api';
@@ -109,14 +109,7 @@ const Layout = () => {
             >
               <Menu className="h-6 w-6" />
             </button>
-            <div className="hidden md:flex relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-              <input 
-                type="text" 
-                placeholder="Search..." 
-                className="pl-10 pr-4 py-2 bg-slate-100 border-none rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 w-64 transition-all"
-              />
-            </div>
+
           </div>
 
           <div className="flex items-center space-x-6">
