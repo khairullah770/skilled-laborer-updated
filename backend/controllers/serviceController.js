@@ -1,23 +1,23 @@
-const mongoose = require('mongoose');
-const ServiceOffering = require('../models/ServiceOffering');
-const Subcategory = require('../models/Subcategory');
-const User = require('../models/User');
+const mongoose = require("mongoose");
+const ServiceOffering = require("../models/ServiceOffering");
+const Subcategory = require("../models/Subcategory");
+const User = require("../models/User");
 
 // Ensure requester is an approved laborer
 const assertApprovedLaborer = async (req) => {
   const user = await User.findById(req.user._id);
   if (!user) {
-    const err = new Error('User not found');
+    const err = new Error("User not found");
     err.statusCode = 404;
     throw err;
   }
-  if (user.role !== 'laborer') {
-    const err = new Error('Only laborers can manage services');
+  if (user.role !== "laborer") {
+    const err = new Error("Only laborers can manage services");
     err.statusCode = 403;
     throw err;
   }
-  if (user.status !== 'approved') {
-    const err = new Error('Account is not verified');
+  if (user.status !== "approved") {
+    const err = new Error("Account is not verified");
     err.statusCode = 403;
     throw err;
   }
@@ -32,25 +32,31 @@ const upsertServiceOffering = async (req, res) => {
     const { subcategoryId, price, description } = req.body;
 
     if (!subcategoryId || price == null) {
-      return res.status(400).json({ message: 'subcategoryId and price are required' });
+      return res
+        .status(400)
+        .json({ message: "subcategoryId and price are required" });
     }
 
     if (!mongoose.Types.ObjectId.isValid(subcategoryId)) {
-      return res.status(400).json({ message: 'Invalid subcategoryId' });
+      return res.status(400).json({ message: "Invalid subcategoryId" });
     }
 
     const sub = await Subcategory.findById(subcategoryId);
     if (!sub) {
-      return res.status(404).json({ message: 'Subcategory not found' });
+      return res.status(404).json({ message: "Subcategory not found" });
     }
 
     const priceNum = Number(price);
     if (Number.isNaN(priceNum)) {
-      return res.status(400).json({ message: 'Price must be a number' });
+      return res.status(400).json({ message: "Price must be a number" });
     }
 
     if (priceNum < sub.minPrice || priceNum > sub.maxPrice) {
-      return res.status(400).json({ message: `Price must be between ${sub.minPrice} and ${sub.maxPrice}` });
+      return res
+        .status(400)
+        .json({
+          message: `Price must be between ${sub.minPrice} and ${sub.maxPrice}`,
+        });
     }
 
     const payload = {
@@ -58,7 +64,7 @@ const upsertServiceOffering = async (req, res) => {
       category: sub.category,
       subcategory: sub._id,
       price: priceNum,
-      description: description || '',
+      description: description || "",
       isActive: !!laborer.isAvailable,
     };
 
@@ -66,13 +72,17 @@ const upsertServiceOffering = async (req, res) => {
     const offering = await ServiceOffering.findOneAndUpdate(
       { laborer: req.user._id, subcategory: sub._id },
       { $set: payload },
-      { upsert: true, new: true, setDefaultsOnInsert: true }
-    ).populate('category', 'name icon').populate('subcategory', 'name minPrice maxPrice');
+      { upsert: true, new: true, setDefaultsOnInsert: true },
+    )
+      .populate("category", "name icon")
+      .populate("subcategory", "name minPrice maxPrice");
 
     res.status(201).json(offering);
   } catch (error) {
-    console.error('upsertServiceOffering error:', error);
-    res.status(error.statusCode || 500).json({ message: error.message || 'Server error' });
+    console.error("upsertServiceOffering error:", error);
+    res
+      .status(error.statusCode || 500)
+      .json({ message: error.message || "Server error" });
   }
 };
 
@@ -83,12 +93,14 @@ const listMyOfferings = async (req, res) => {
     await assertApprovedLaborer(req);
     const offerings = await ServiceOffering.find({ laborer: req.user._id })
       .sort({ updatedAt: -1 })
-      .populate('category', 'name icon')
-      .populate('subcategory', 'name minPrice maxPrice');
+      .populate("category", "name icon")
+      .populate("subcategory", "name minPrice maxPrice");
     res.json(offerings);
   } catch (error) {
-    console.error('listMyOfferings error:', error);
-    res.status(error.statusCode || 500).json({ message: error.message || 'Server error' });
+    console.error("listMyOfferings error:", error);
+    res
+      .status(error.statusCode || 500)
+      .json({ message: error.message || "Server error" });
   }
 };
 
@@ -99,16 +111,18 @@ const deleteServiceOffering = async (req, res) => {
     await assertApprovedLaborer(req);
     const off = await ServiceOffering.findById(req.params.id);
     if (!off) {
-      return res.status(404).json({ message: 'Service not found' });
+      return res.status(404).json({ message: "Service not found" });
     }
     if (off.laborer.toString() !== req.user._id.toString()) {
-      return res.status(403).json({ message: 'Not authorized' });
+      return res.status(403).json({ message: "Not authorized" });
     }
     await off.deleteOne();
     res.json({ id: req.params.id });
   } catch (error) {
-    console.error('deleteServiceOffering error:', error);
-    res.status(error.statusCode || 500).json({ message: error.message || 'Server error' });
+    console.error("deleteServiceOffering error:", error);
+    res
+      .status(error.statusCode || 500)
+      .json({ message: error.message || "Server error" });
   }
 };
 
@@ -118,88 +132,155 @@ module.exports = {
   deleteServiceOffering,
   async searchLaborers(req, res) {
     try {
-      const { subcategory, page = 1, limit = 20, minPrice, maxPrice, minRating, nearLat, nearLng, radiusKm, onlineOnly, includeUnapproved, debug } = req.query;
-      if (!subcategory) return res.status(400).json({ message: 'subcategory is required' });
+      const {
+        subcategory,
+        page = 1,
+        limit = 20,
+        minPrice,
+        maxPrice,
+        minRating,
+        nearLat,
+        nearLng,
+        radiusKm,
+        onlineOnly,
+        includeUnapproved,
+        sortBy,
+        debug,
+      } = req.query;
+      if (!subcategory)
+        return res.status(400).json({ message: "subcategory is required" });
       const q = { subcategory, isActive: true };
-      if (minPrice != null) q.price = Object.assign(q.price || {}, { $gte: Number(minPrice) });
-      if (maxPrice != null) q.price = Object.assign(q.price || {}, { $lte: Number(maxPrice) });
+      if (minPrice != null)
+        q.price = Object.assign(q.price || {}, { $gte: Number(minPrice) });
+      if (maxPrice != null)
+        q.price = Object.assign(q.price || {}, { $lte: Number(maxPrice) });
       const skip = (Number(page) - 1) * Number(limit);
       let offerings = await ServiceOffering.find(q)
         .sort({ updatedAt: -1 })
         .skip(skip)
         .limit(Number(limit))
-        .populate('subcategory', 'name minPrice maxPrice');
+        .populate("subcategory", "name minPrice maxPrice");
       if (offerings.length === 0) {
         try {
           const subDoc = await Subcategory.findById(subcategory).lean();
           if (subDoc?.name) {
-            const sameNameSubs = await Subcategory.find({ name: subDoc.name }).select('_id').lean();
-            const ids = sameNameSubs.map(s => s._id);
+            const sameNameSubs = await Subcategory.find({ name: subDoc.name })
+              .select("_id")
+              .lean();
+            const ids = sameNameSubs.map((s) => s._id);
             if (ids.length > 0) {
-              offerings = await ServiceOffering.find({ subcategory: { $in: ids }, isActive: true })
+              offerings = await ServiceOffering.find({
+                subcategory: { $in: ids },
+                isActive: true,
+              })
                 .sort({ updatedAt: -1 })
                 .skip(skip)
                 .limit(Number(limit))
-                .populate('subcategory', 'name minPrice maxPrice');
+                .populate("subcategory", "name minPrice maxPrice");
             }
           }
         } catch {}
       }
-      const laborerIds = offerings.map(o => o.laborer);
+      const laborerIds = offerings.map((o) => o.laborer);
       const fiveMinAgo = new Date(Date.now() - 5 * 60 * 1000);
       const users = await User.find({
         _id: { $in: laborerIds },
-        role: 'laborer'
-      }).select('name profileImage rating experience currentLocation isAvailable lastActive status completedJobs');
-      const userMap = new Map(users.map(u => [u._id.toString(), u]));
-      let approvedCount = 0, onlineCount = 0;
-      const data = offerings.map(o => {
-        const u = userMap.get(o.laborer.toString());
-        const online = !!u && (!!u.isAvailable || (u.lastActive && u.lastActive > fiveMinAgo));
-        if (u && u.status === 'approved') approvedCount++;
-        if (online) onlineCount++;
-        let distanceKm = null;
-        if (u?.currentLocation?.latitude != null && nearLat != null && nearLng != null) {
-          const toRad = d => (d * Math.PI) / 180;
-          const R = 6371;
-          const dLat = toRad(u.currentLocation.latitude - Number(nearLat));
-          const dLon = toRad(u.currentLocation.longitude - Number(nearLng));
-          const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(Number(nearLat))) * Math.cos(toRad(u.currentLocation.latitude)) * Math.sin(dLon / 2) ** 2;
-          const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-          distanceKm = R * c;
-        }
-        return {
-          laborerId: o.laborer.toString(),
-          price: o.price,
-          subcategory: o.subcategory,
-          profile: u ? {
-            name: u.name,
-            profileImage: u.profileImage,
-            rating: u.rating || 0,
-            experience: u.experience || '',
-            currentLocation: u.currentLocation || null,
-            online,
-            status: u.status,
-            completedJobs: u.completedJobs || 0
-          } : null,
-          distanceKm
-        };
-      }).filter(item => {
-        if (!includeUnapproved || includeUnapproved === 'false') {
-          if (!item.profile || item.profile.status !== 'approved') return false;
-        }
-        if (onlineOnly === 'true') {
-          if (!item.profile || !item.profile.online) return false;
-        }
-        if (minRating != null && item.profile) {
-          if ((item.profile.rating || 0) < Number(minRating)) return false;
-        }
-        if (radiusKm != null && item.distanceKm != null) {
-          if (item.distanceKm > Number(radiusKm)) return false;
-        }
-        return true;
-      });
-      if (debug === 'true') {
+        role: "laborer",
+      }).select(
+        "name profileImage rating experience currentLocation isAvailable lastActive status completedJobs",
+      );
+      const userMap = new Map(users.map((u) => [u._id.toString(), u]));
+      let approvedCount = 0,
+        onlineCount = 0;
+      const data = offerings
+        .map((o) => {
+          const u = userMap.get(o.laborer.toString());
+          const online =
+            !!u &&
+            (!!u.isAvailable || (u.lastActive && u.lastActive > fiveMinAgo));
+          if (u && u.status === "approved") approvedCount++;
+          if (online) onlineCount++;
+          let distanceKm = null;
+          if (
+            u?.currentLocation?.latitude != null &&
+            nearLat != null &&
+            nearLng != null
+          ) {
+            const toRad = (d) => (d * Math.PI) / 180;
+            const R = 6371;
+            const dLat = toRad(u.currentLocation.latitude - Number(nearLat));
+            const dLon = toRad(u.currentLocation.longitude - Number(nearLng));
+            const a =
+              Math.sin(dLat / 2) ** 2 +
+              Math.cos(toRad(Number(nearLat))) *
+                Math.cos(toRad(u.currentLocation.latitude)) *
+                Math.sin(dLon / 2) ** 2;
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+            distanceKm = R * c;
+          }
+          return {
+            laborerId: o.laborer.toString(),
+            price: o.price,
+            subcategory: o.subcategory,
+            profile: u
+              ? {
+                  name: u.name,
+                  profileImage: u.profileImage,
+                  rating: u.rating || 0,
+                  experience: u.experience || "",
+                  currentLocation: u.currentLocation || null,
+                  online,
+                  status: u.status,
+                  completedJobs: u.completedJobs || 0,
+                }
+              : null,
+            distanceKm,
+          };
+        })
+        .filter((item) => {
+          if (!includeUnapproved || includeUnapproved === "false") {
+            if (!item.profile || item.profile.status !== "approved")
+              return false;
+          }
+          if (onlineOnly === "true") {
+            if (!item.profile || !item.profile.online) return false;
+          }
+          if (minRating != null && item.profile) {
+            if ((item.profile.rating || 0) < Number(minRating)) return false;
+          }
+          if (radiusKm != null && item.distanceKm != null) {
+            if (item.distanceKm > Number(radiusKm)) return false;
+          }
+          return true;
+        });
+
+      // Apply sorting based on sortBy parameter
+      if (sortBy) {
+        const sortFields = sortBy.split(",");
+        data.sort((a, b) => {
+          for (const field of sortFields) {
+            let diff = 0;
+            switch (field) {
+              case "price_high_low":
+                diff = (b.price || 0) - (a.price || 0);
+                break;
+              case "price_low_high":
+                diff = (a.price || 0) - (b.price || 0);
+                break;
+              case "ratings":
+                diff = (b.profile?.rating || 0) - (a.profile?.rating || 0);
+                break;
+              case "nearest":
+                diff = (a.distanceKm ?? 99999) - (b.distanceKm ?? 99999);
+                break;
+            }
+            if (diff !== 0) return diff;
+          }
+          return 0;
+        });
+      }
+
+      if (debug === "true") {
         return res.json({
           results: data,
           page: Number(page),
@@ -209,13 +290,18 @@ module.exports = {
             offeringsCount: offerings.length,
             usersFetched: users.length,
             approvedCount,
-            onlineCount
-          }
+            onlineCount,
+          },
         });
       }
-      res.json({ results: data, page: Number(page), limit: Number(limit), count: data.length });
+      res.json({
+        results: data,
+        page: Number(page),
+        limit: Number(limit),
+        count: data.length,
+      });
     } catch (error) {
-      res.status(500).json({ message: error.message || 'Server error' });
+      res.status(500).json({ message: error.message || "Server error" });
     }
-  }
+  },
 };

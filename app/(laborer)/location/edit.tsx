@@ -25,7 +25,9 @@ export default function EditLocationScreen() {
     const [searchQuery, setSearchQuery] = useState('');
     const [suggestions, setSuggestions] = useState<LocationSuggestion[]>([]);
     const [searching, setSearching] = useState(false);
-    const searchTimeout = useRef<NodeJS.Timeout | null>(null);
+    const [searchError, setSearchError] = useState<string | null>(null);
+    const searchTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const abortControllerRef = useRef<AbortController | null>(null);
     const mapRef = useRef<MapView>(null);
     
     // Initial region from user context or default
@@ -66,28 +68,88 @@ export default function EditLocationScreen() {
     const fetchSuggestions = async (query: string) => {
         if (!query.trim()) {
             setSuggestions([]);
+            setSearchError(null);
             return;
         }
 
+        // Cancel any in-flight request
+        if (abortControllerRef.current) {
+            abortControllerRef.current.abort();
+        }
+
+        const controller = new AbortController();
+        abortControllerRef.current = controller;
+
+        // Auto-abort after 8 seconds
+        const timeoutId = setTimeout(() => controller.abort(), 8000);
+
         setSearching(true);
+        setSearchError(null);
         try {
             // Using OpenStreetMap Nominatim API for free autocomplete suggestions
             // Restricted to Pakistan (countrycodes=pk)
-            const response = await fetch(
-                `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=5&addressdetails=1&countrycodes=pk&accept-language=en`,
-                {
-                    headers: {
-                        'User-Agent': 'SkilledLaborApp/1.0',
-                        'Accept-Language': 'en'
-                    }
-                }
-            );
+            // NOTE: Nominatim REQUIRES a valid User-Agent identifying the app
+            const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=5&addressdetails=1&countrycodes=pk&accept-language=en`;
+            console.log('[LocationSearch] Fetching:', url);
+            const response = await fetch(url, {
+                signal: controller.signal,
+                headers: {
+                    'User-Agent': 'SkilledLaborApp/1.0 (contact@skilledlabor.pk)',
+                    'Accept': 'application/json',
+                },
+            });
+            console.log('[LocationSearch] Status:', response.status);
+
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}`);
+            }
+
             const data = await response.json();
-            setSuggestions(data);
-        } catch (error) {
-            console.error('Search error:', error);
+
+            console.log('[LocationSearch] Results:', data?.length ?? 0);
+            if (!controller.signal.aborted) {
+                if (data && data.length > 0) {
+                    setSuggestions(data);
+                    setSearchError(null);
+                } else {
+                    setSuggestions([]);
+                    setSearchError('No results found. Try a different search.');
+                }
+            }
+        } catch (error: any) {
+            if (error?.name === 'AbortError') {
+                // Request was cancelled — ignore
+                return;
+            }
+            console.error('[LocationSearch] Nominatim error:', error?.message || error);
+
+            // Fallback: use expo-location geocodeAsync
+            console.log('[LocationSearch] Trying fallback geocodeAsync...');
+            try {
+                const geoResults = await Location.geocodeAsync(query);
+                if (geoResults.length > 0) {
+                    const fallbackSuggestions: LocationSuggestion[] = geoResults.map((g, i) => ({
+                        place_id: Date.now() + i,
+                        display_name: `${query} (${g.latitude.toFixed(4)}, ${g.longitude.toFixed(4)})`,
+                        lat: String(g.latitude),
+                        lon: String(g.longitude),
+                    }));
+                    setSuggestions(fallbackSuggestions);
+                    setSearchError(null);
+                } else {
+                    setSuggestions([]);
+                    setSearchError('Search failed. Check your internet connection.');
+                }
+            } catch (fallbackErr) {
+                console.error('Fallback geocode error:', fallbackErr);
+                setSuggestions([]);
+                setSearchError('Search failed. Check your internet connection.');
+            }
         } finally {
-            setSearching(false);
+            clearTimeout(timeoutId);
+            if (!controller.signal.aborted) {
+                setSearching(false);
+            }
         }
     };
 
@@ -101,9 +163,10 @@ export default function EditLocationScreen() {
         if (text.length > 2) {
             searchTimeout.current = setTimeout(() => {
                 fetchSuggestions(text);
-            }, 500); // 500ms debounce
+            }, 800); // 800ms debounce (Nominatim requires ≤1 req/sec)
         } else {
             setSuggestions([]);
+            setSearchError(null);
         }
     };
     
@@ -282,7 +345,7 @@ export default function EditLocationScreen() {
                         {searching ? (
                              <ActivityIndicator size="small" color="#1F41BB" style={{ marginRight: 10 }} />
                         ) : searchQuery.length > 0 ? (
-                            <TouchableOpacity onPress={() => { setSearchQuery(''); setSuggestions([]); }}>
+                            <TouchableOpacity onPress={() => { setSearchQuery(''); setSuggestions([]); setSearchError(null); }}>
                                 <Ionicons name="close-circle" size={18} color="#9CA3AF" style={{ marginRight: 10 }} />
                             </TouchableOpacity>
                         ) : null}
@@ -292,7 +355,7 @@ export default function EditLocationScreen() {
                         <View style={styles.suggestionsContainer}>
                             <FlatList
                                 data={suggestions}
-                                keyExtractor={(item) => item.place_id.toString()}
+                                keyExtractor={(item) => String(item.place_id)}
                                 renderItem={({ item }) => (
                                     <TouchableOpacity 
                                         style={styles.suggestionItem}
@@ -304,8 +367,15 @@ export default function EditLocationScreen() {
                                         </Text>
                                     </TouchableOpacity>
                                 )}
-                                keyboardShouldPersistTaps="handled"
+                                keyboardShouldPersistTaps="always"
+                                nestedScrollEnabled
                             />
+                        </View>
+                    )}
+                    {searchError && suggestions.length === 0 && !searching && (
+                        <View style={styles.searchErrorContainer}>
+                            <Ionicons name="alert-circle-outline" size={16} color="#EF4444" />
+                            <Text style={styles.searchErrorText}>{searchError}</Text>
                         </View>
                     )}
                 </View>
@@ -324,12 +394,6 @@ export default function EditLocationScreen() {
             </View>
 
             <View style={styles.footer}>
-                <View style={styles.coordinatesContainer}>
-                    <Text style={styles.coordinatesLabel}>Selected Coordinates:</Text>
-                    <Text style={styles.coordinatesValue}>
-                        {selectedLocation.latitude.toFixed(6)}, {selectedLocation.longitude.toFixed(6)}
-                    </Text>
-                </View>
                 <Button
                     text={loading ? "Saving..." : "Save Location"}
                     onPress={handleSaveLocation}
@@ -391,7 +455,8 @@ const styles = StyleSheet.create({
         top: 20,
         left: 20,
         right: 20,
-        zIndex: 5,
+        zIndex: 999,
+        elevation: 10,
     },
     searchInputContainer: {
         flexDirection: 'row',
@@ -426,7 +491,8 @@ const styles = StyleSheet.create({
         },
         shadowOpacity: 0.25,
         shadowRadius: 3.84,
-        elevation: 5,
+        elevation: 10,
+        zIndex: 999,
     },
     suggestionItem: {
         flexDirection: 'row',
@@ -439,6 +505,20 @@ const styles = StyleSheet.create({
         flex: 1,
         fontSize: 14,
         color: '#1F2937',
+    },
+    searchErrorContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#FEF2F2',
+        marginTop: 5,
+        borderRadius: 10,
+        padding: 12,
+    },
+    searchErrorText: {
+        flex: 1,
+        fontSize: 13,
+        color: '#EF4444',
+        marginLeft: 8,
     },
     currentLocationButton: {
         position: 'absolute',

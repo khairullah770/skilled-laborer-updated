@@ -14,11 +14,29 @@ export default function LaborerProfileScreen() {
     const [activeTab, setActiveTab] = useState<'About' | 'Reviews'>('About');
     const [profile, setProfile] = useState<any>(null);
     const [loading, setLoading] = useState(true);
+    const [hasAcceptedBooking, setHasAcceptedBooking] = useState(false);
 
     useEffect(() => {
         const load = async () => {
             if (!id) return;
             console.log('[LaborerProfile] init id=', id);
+
+            // Check whether customer has an accepted booking with this laborer
+            try {
+                const token = await AsyncStorage.getItem('userToken');
+                if (token) {
+                    const checkRes = await fetch(`${API_URL}/api/bookings/check-accepted/${id}`, {
+                        headers: { Authorization: `Bearer ${token}` },
+                    });
+                    if (checkRes.ok) {
+                        const checkData = await checkRes.json();
+                        setHasAcceptedBooking(!!checkData.hasAcceptedBooking);
+                    }
+                }
+            } catch (e) {
+                console.warn('[LaborerProfile] booking check failed', e);
+            }
+
             const cacheKey = `laborerProfile:v2:${id}`;
             const cached = await AsyncStorage.getItem(cacheKey);
             let useCached = false;
@@ -108,7 +126,7 @@ export default function LaborerProfileScreen() {
                             <Ionicons name="star" size={16} color="#FFD700" />
                             <Text style={styles.totalRatingsText}>{` (${profile.totalReviews || 0})`}</Text>
                         </View>
-                        {profile.phone ? (
+                        {hasAcceptedBooking && profile.phone ? (
                             <TouchableOpacity onPress={() => {
                                 const phone = String(profile.phone).replace(/[^\d+]/g, '');
                                 const url = `whatsapp://send?phone=${phone}`;
@@ -124,22 +142,26 @@ export default function LaborerProfileScreen() {
                 </View>
 
                 <View style={styles.actions}>
-                    <TouchableOpacity style={styles.actionBtn}>
-                        <Ionicons name="chatbubble-ellipses-outline" size={20} color="#fff" />
-                        <Text style={styles.actionText}>Chat</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity style={styles.actionBtn} onPress={() => {
-                        if (profile.phone) {
-                            const phone = String(profile.phone).replace(/[^\d+]/g, '');
-                            const url = `whatsapp://send?phone=${phone}`;
-                            Linking.openURL(url).catch(() => {
-                                Linking.openURL(`https://wa.me/${phone}`);
-                            });
-                        }
-                    }}>
-                        <Ionicons name="logo-whatsapp" size={20} color="#fff" />
-                        <Text style={styles.actionText}>WhatsApp</Text>
-                    </TouchableOpacity>
+                    {hasAcceptedBooking ? (
+                        <>
+                            <TouchableOpacity style={styles.actionBtn}>
+                                <Ionicons name="chatbubble-ellipses-outline" size={20} color="#fff" />
+                                <Text style={styles.actionText}>Chat</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity style={styles.actionBtn} onPress={() => {
+                                if (profile.phone) {
+                                    const phone = String(profile.phone).replace(/[^\d+]/g, '');
+                                    const url = `whatsapp://send?phone=${phone}`;
+                                    Linking.openURL(url).catch(() => {
+                                        Linking.openURL(`https://wa.me/${phone}`);
+                                    });
+                                }
+                            }}>
+                                <Ionicons name="logo-whatsapp" size={20} color="#fff" />
+                                <Text style={styles.actionText}>WhatsApp</Text>
+                            </TouchableOpacity>
+                        </>
+                    ) : null}
                 </View>
 
                 <View style={styles.tabs}>
@@ -159,15 +181,20 @@ export default function LaborerProfileScreen() {
                 <View style={styles.tabContentBg}>
                     {activeTab === 'About' ? (
                         <View style={styles.aboutContent}>
-                            <Text style={styles.sectionHeader}>Experienced</Text>
-                            <Text style={styles.servicesText}>{profile.experience || ''}</Text>
+                            <Text style={styles.sectionHeader}>Experience</Text>
+                            <Text style={styles.servicesText}>{profile.experience || ''} years </Text>
                             <View style={{ height: 20 }} />
                             <Text style={styles.sectionHeader}>Services ({Array.isArray(profile.offerings) ? profile.offerings.length : 0})</Text>
                             {profile.offerings && profile.offerings.length > 0 ? (
                                 profile.offerings.map((o: any) => (
-                                    <View key={o.subcategory?._id || o.subcategory} style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 }}>
-                                        <Text style={{ fontSize: 16 }}>{o.subcategory?.name || 'Service'}</Text>
-                                        <Text style={{ fontSize: 16, fontWeight: 'bold' }}>Rs {o.price}</Text>
+                                    <View key={o.subcategory?._id || o.subcategory} style={{ marginBottom: 12 }}>
+                                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 2 }}>
+                                            <Text style={{ fontSize: 16, fontWeight: '600', flex: 1, marginRight: 8 }}>{o.subcategory?.name || 'Service'}</Text>
+                                            <Text style={{ fontSize: 16, fontWeight: 'bold' }}>Rs {o.price}</Text>
+                                        </View>
+                                        {o.description ? (
+                                            <Text style={{ fontSize: 13, color: '#666', lineHeight: 18 }}>{o.description}</Text>
+                                        ) : null}
                                     </View>
                                 ))
                             ) : (
@@ -331,6 +358,22 @@ const styles = StyleSheet.create({
         borderRadius: 10
     },
     actionText: { color: '#fff', fontWeight: '700' },
+    contactLockedRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
+        backgroundColor: '#F5F5F5',
+        paddingHorizontal: 14,
+        paddingVertical: 10,
+        borderRadius: 10,
+        flex: 1,
+        justifyContent: 'center',
+    },
+    contactLockedText: {
+        fontSize: 13,
+        color: '#888',
+        fontWeight: '500',
+    },
     tabs: {
         flexDirection: 'row',
         backgroundColor: '#E0E0E0',

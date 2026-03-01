@@ -161,7 +161,7 @@ export default function HomeScreen() {
         {/* Modern Header Section */}
         <View style={styles.header}>
           <View style={{ flex: 1, minWidth: 0 }}>
-            <Text style={[styles.greeting, { color: colors.text, opacity: 0.6 }]}>Welcome back,</Text>
+            <Text style={[styles.greeting, { color: colors.text, opacity: 0.6 }]}>Welcome Back,</Text>
             <Text style={[styles.userName, { color: colors.text }]} numberOfLines={2}>
               {computeDisplayName(user)}
             </Text>
@@ -178,7 +178,7 @@ export default function HomeScreen() {
               </Text>
             </View>
             <TouchableOpacity
-                style={[styles.statusToggle, { backgroundColor: isAvailable ? '#4ADE80' : '#F87171' }]}
+                style={[styles.statusToggle, { backgroundColor: isAvailable ? '#F87171' : '#4ADE80' }]}
                 onPress={toggleAvailability}
                 activeOpacity={0.8}
             >

@@ -409,7 +409,7 @@ export default function ServiceScreen() {
                   <View onLayout={e => setDescLayout({ y: e.nativeEvent.layout.y, height: e.nativeEvent.layout.height })} style={{ marginTop: 10, backgroundColor: colorScheme === 'dark' ? '#2A2A2A' : '#F3F4F6', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10 }}>
                     <Text style={{ fontSize: 12, color: colors.text, opacity: 0.6, marginBottom: 6 }}>Description</Text>
                     <TextInput
-                      ref={ref => (descRef.current = ref)}
+                      ref={ref => { descRef.current = ref; }}
                       accessibilityLabel="Service description input"
                       value={description}
                       onChangeText={setDescription}

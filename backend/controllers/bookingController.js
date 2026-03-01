@@ -1,11 +1,11 @@
-const mongoose = require('mongoose');
-const Booking = require('../models/Booking');
-const User = require('../models/User');
-const Notification = require('../models/Notification');
-const ServiceOffering = require('../models/ServiceOffering');
-const JobRating = require('../models/JobRating');
-const { calculateNewAverage } = require('../utils/ratingUtils');
-const { sendPushNotification } = require('../utils/notificationService');
+const mongoose = require("mongoose");
+const Booking = require("../models/Booking");
+const User = require("../models/User");
+const Notification = require("../models/Notification");
+const ServiceOffering = require("../models/ServiceOffering");
+const JobRating = require("../models/JobRating");
+const { calculateNewAverage } = require("../utils/ratingUtils");
+const { sendPushNotification } = require("../utils/notificationService");
 
 // @desc    Get all bookings
 // @route   GET /api/bookings
@@ -13,8 +13,8 @@ const { sendPushNotification } = require('../utils/notificationService');
 const getBookings = async (req, res) => {
   try {
     const bookings = await Booking.find()
-      .populate('customer', 'name email')
-      .populate('laborer', 'name category')
+      .populate("customer", "name email")
+      .populate("laborer", "name category")
       .sort({ createdAt: -1 });
     res.status(200).json(bookings);
   } catch (error) {
@@ -31,7 +31,7 @@ const updateBookingStatus = async (req, res) => {
     const booking = await Booking.findById(req.params.id);
 
     if (!booking) {
-      return res.status(404).json({ message: 'Booking not found' });
+      return res.status(404).json({ message: "Booking not found" });
     }
 
     booking.status = status;
@@ -50,87 +50,141 @@ const createBooking = async (req, res) => {
   const session = await mongoose.startSession();
   session.startTransaction();
   try {
-    const customerId = (req.customer?._id) || (req.user?._id);
+    const customerId = req.customer?._id || req.user?._id;
     if (!customerId) {
-      return res.status(401).json({ message: 'Not authorized' });
+      return res.status(401).json({ message: "Not authorized" });
     }
-    const { laborerId, service, serviceDescription, scheduledAt, address, latitude, longitude, estimatedDurationMin, price, offeringId } = req.body;
+    const {
+      laborerId,
+      service,
+      serviceDescription,
+      scheduledAt,
+      address,
+      latitude,
+      longitude,
+      estimatedDurationMin,
+      price,
+      offeringId,
+    } = req.body;
 
     if (!laborerId || !service || !scheduledAt || !address || price == null) {
-      return res.status(400).json({ message: 'laborerId, service, scheduledAt, address and price are required' });
+      return res.status(400).json({
+        message:
+          "laborerId, service, scheduledAt, address and price are required",
+      });
     }
     const when = new Date(scheduledAt);
     if (Number.isNaN(when.getTime())) {
-      return res.status(400).json({ message: 'scheduledAt must be a valid date' });
+      return res
+        .status(400)
+        .json({ message: "scheduledAt must be a valid date" });
     }
     const laborer = await User.findById(laborerId).session(session);
-    if (!laborer || laborer.role !== 'laborer') {
-      return res.status(404).json({ message: 'Laborer not found' });
+    if (!laborer || laborer.role !== "laborer") {
+      return res.status(404).json({ message: "Laborer not found" });
+    }
+
+    // Prevent duplicate active bookings for the same customer + laborer
+    const existingActive = await Booking.findOne({
+      customer: customerId,
+      laborer: laborerId,
+      status: { $in: ["Pending", "Accepted", "In Progress"] },
+    }).session(session);
+
+    if (existingActive) {
+      await session.abortTransaction().catch(() => {});
+      session.endSession();
+      return res.status(409).json({
+        message: `You already have an active booking (${existingActive.status}) with this laborer. Please wait until it is completed, cancelled, or declined before creating a new one.`,
+        existingBookingId: existingActive._id,
+      });
     }
 
     let finalService = service;
     let finalPrice = Number(price);
     if (offeringId) {
       const offering = await ServiceOffering.findById(offeringId)
-        .populate('subcategory', 'name')
+        .populate("subcategory", "name")
         .session(session);
       if (!offering || offering.laborer.toString() !== laborerId.toString()) {
         await session.abortTransaction().catch(() => {});
         session.endSession();
-        return res.status(400).json({ message: 'Invalid service offering selected' });
+        return res
+          .status(400)
+          .json({ message: "Invalid service offering selected" });
       }
       finalService = offering.subcategory?.name || service;
       finalPrice = offering.price;
     }
 
-    const [created] = await Booking.create([{
-      customer: customerId,
-      laborer: laborerId,
-      service: finalService,
-      serviceDescription: serviceDescription || '',
-      scheduledAt: when,
-      location: { address, latitude, longitude },
-      estimatedDurationMin: estimatedDurationMin != null ? Number(estimatedDurationMin) : 45,
-      compensation: finalPrice,
-      status: 'Pending',
-      log: [{ action: 'created', by: customerId, meta: { price: finalPrice } }]
-    }], { session });
+    const [created] = await Booking.create(
+      [
+        {
+          customer: customerId,
+          laborer: laborerId,
+          service: finalService,
+          serviceDescription: serviceDescription || "",
+          scheduledAt: when,
+          location: { address, latitude, longitude },
+          estimatedDurationMin:
+            estimatedDurationMin != null ? Number(estimatedDurationMin) : 45,
+          compensation: finalPrice,
+          status: "Pending",
+          log: [
+            { action: "created", by: customerId, meta: { price: finalPrice } },
+          ],
+        },
+      ],
+      { session },
+    );
 
-    await Notification.create([{
-      recipient: laborerId,
-      type: 'job_request',
-      title: 'New Job Request',
-      message: `New ${finalService} request scheduled`,
-      data: {
-        bookingId: created._id,
-        customerId,
-        service: finalService,
-        serviceDescription: serviceDescription || '',
-        scheduledAt: when,
-        address,
-        latitude,
-        longitude,
-        estimatedDurationMin: estimatedDurationMin != null ? Number(estimatedDurationMin) : 45,
-        compensation: finalPrice
-      }
-    }], { session });
+    await Notification.create(
+      [
+        {
+          recipient: laborerId,
+          type: "job_request",
+          title: "New Job Request",
+          message: `New ${finalService} request scheduled`,
+          data: {
+            bookingId: created._id,
+            customerId,
+            service: finalService,
+            serviceDescription: serviceDescription || "",
+            scheduledAt: when,
+            address,
+            latitude,
+            longitude,
+            estimatedDurationMin:
+              estimatedDurationMin != null ? Number(estimatedDurationMin) : 45,
+            compensation: finalPrice,
+          },
+        },
+      ],
+      { session },
+    );
 
     try {
-      await sendPushNotification(laborerId, 'New Job Request', `New ${finalService} request scheduled`);
+      await sendPushNotification(
+        laborerId,
+        "New Job Request",
+        `New ${finalService} request scheduled`,
+      );
     } catch (pushErr) {
-      console.error('Push notification failed for booking create:', pushErr);
+      console.error("Push notification failed for booking create:", pushErr);
     }
 
     await session.commitTransaction();
     session.endSession();
     const populated = await Booking.findById(created._id)
-      .populate('customer', 'name email profileImage')
-      .populate('laborer', 'name profileImage phone');
+      .populate("customer", "name email profileImage")
+      .populate("laborer", "name profileImage phone");
     res.status(201).json(populated || created);
   } catch (error) {
     await session.abortTransaction().catch(() => {});
     session.endSession();
-    res.status(400).json({ message: error.message || 'Failed to create booking' });
+    res
+      .status(400)
+      .json({ message: error.message || "Failed to create booking" });
   }
 };
 
@@ -139,21 +193,23 @@ const createBooking = async (req, res) => {
 // @access  Private
 const getMyBookings = async (req, res) => {
   try {
-    const principalId = (req.customer?._id) || (req.user?._id);
-    if (!principalId) return res.status(401).json({ message: 'Not authorized' });
+    const principalId = req.customer?._id || req.user?._id;
+    if (!principalId)
+      return res.status(401).json({ message: "Not authorized" });
     const items = await Booking.find({ customer: principalId })
-      .populate('laborer', 'name profileImage phone')
+      .populate("laborer", "name profileImage phone")
       .sort({ scheduledAt: 1 });
 
-    const normalize = (status) => (status || '').toString().toLowerCase().trim();
+    const normalize = (status) =>
+      (status || "").toString().toLowerCase().trim();
 
     const classifyPending = (status) => {
       const s = normalize(status);
       return (
-        s === 'pending' ||
-        s === 'waiting for laborer approval' ||
-        s === 'waiting_for_laborer_approval' ||
-        s === 'waiting for approval'
+        s === "pending" ||
+        s === "waiting for laborer approval" ||
+        s === "waiting_for_laborer_approval" ||
+        s === "waiting for approval"
       );
     };
 
@@ -161,22 +217,22 @@ const getMyBookings = async (req, res) => {
       const s = normalize(status);
       return (
         classifyPending(status) ||
-        s === 'accepted' ||
-        s === 'in progress' ||
-        s === 'rescheduled'
+        s === "accepted" ||
+        s === "in progress" ||
+        s === "rescheduled"
       );
     };
 
     const isPast = (status) => {
       const s = normalize(status);
-      return s === 'completed' || s === 'cancelled';
+      return s === "completed" || s === "cancelled";
     };
 
     const upcoming = items
-      .filter(b => isUpcoming(b.status))
+      .filter((b) => isUpcoming(b.status))
       .sort((a, b) => a.scheduledAt - b.scheduledAt);
     const past = items
-      .filter(b => isPast(b.status))
+      .filter((b) => isPast(b.status))
       .sort((a, b) => b.scheduledAt - a.scheduledAt);
     res.json({ upcoming, past });
   } catch (error) {
@@ -190,10 +246,12 @@ const getMyBookings = async (req, res) => {
 const getMyJobs = async (req, res) => {
   try {
     const items = await Booking.find({ laborer: req.user._id })
-      .populate('customer', 'name profileImage phone email')
+      .populate("customer", "name profileImage phone email")
       .sort({ scheduledAt: 1 });
-    const upcoming = items.filter(b => ['Pending', 'Accepted', 'In Progress', 'Rescheduled'].includes(b.status));
-    const completed = items.filter(b => b.status === 'Completed');
+    const upcoming = items.filter((b) =>
+      ["Pending", "Accepted", "In Progress", "Rescheduled"].includes(b.status),
+    );
+    const completed = items.filter((b) => b.status === "Completed");
     res.json({ upcoming, completed });
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -206,20 +264,27 @@ const getMyJobs = async (req, res) => {
 const acceptBooking = async (req, res) => {
   try {
     const booking = await Booking.findById(req.params.id);
-    if (!booking) return res.status(404).json({ message: 'Booking not found' });
-    if (booking.laborer.toString() !== req.user._id.toString()) return res.status(403).json({ message: 'Not authorized' });
-    if (booking.status !== 'Pending') {
-      return res.status(400).json({ message: 'Only pending bookings can be accepted' });
+    if (!booking) return res.status(404).json({ message: "Booking not found" });
+    if (booking.laborer.toString() !== req.user._id.toString())
+      return res.status(403).json({ message: "Not authorized" });
+    if (booking.status !== "Pending") {
+      return res
+        .status(400)
+        .json({ message: "Only pending bookings can be accepted" });
     }
-    booking.status = 'Accepted';
+    booking.status = "Accepted";
     booking.acceptedAt = new Date();
-    booking.log.push({ action: 'accepted', by: req.user._id, meta: { at: booking.acceptedAt } });
+    booking.log.push({
+      action: "accepted",
+      by: req.user._id,
+      meta: { at: booking.acceptedAt },
+    });
     await booking.save();
-    const laborerName = req.user.name || 'your laborer';
+    const laborerName = req.user.name || "your laborer";
     await Notification.create({
       recipient: booking.customer,
-      type: 'job_request',
-      title: 'Job Accepted',
+      type: "job_request",
+      title: "Job Accepted",
       message: `Your job has been accepted by ${laborerName}`,
       data: {
         bookingId: booking._id,
@@ -229,13 +294,17 @@ const acceptBooking = async (req, res) => {
         service: booking.service,
         scheduledAt: booking.scheduledAt,
         address: booking.location?.address,
-        compensation: booking.compensation
-      }
+        compensation: booking.compensation,
+      },
     });
     try {
-      await sendPushNotification(booking.customer, 'Job Accepted', `Your job has been accepted by ${laborerName}`);
+      await sendPushNotification(
+        booking.customer,
+        "Job Accepted",
+        `Your job has been accepted by ${laborerName}`,
+      );
     } catch (pushErr) {
-      console.error('Push notification failed for booking accept:', pushErr);
+      console.error("Push notification failed for booking accept:", pushErr);
     }
     res.json(booking);
   } catch (error) {
@@ -249,28 +318,44 @@ const acceptBooking = async (req, res) => {
 const declineBooking = async (req, res) => {
   try {
     const booking = await Booking.findById(req.params.id);
-    if (!booking) return res.status(404).json({ message: 'Booking not found' });
-    if (booking.laborer.toString() !== req.user._id.toString()) return res.status(403).json({ message: 'Not authorized' });
-    if (booking.status === 'Completed' || booking.status === 'Cancelled') {
-      return res.status(400).json({ message: 'Completed or cancelled bookings cannot be cancelled again' });
+    if (!booking) return res.status(404).json({ message: "Booking not found" });
+    if (booking.laborer.toString() !== req.user._id.toString())
+      return res.status(403).json({ message: "Not authorized" });
+    if (booking.status === "Completed" || booking.status === "Cancelled") {
+      return res.status(400).json({
+        message: "Completed or cancelled bookings cannot be cancelled again",
+      });
     }
-    booking.status = 'Cancelled';
+    booking.status = "Cancelled";
     booking.cancelledAt = new Date();
-    const reason = typeof req.body?.reason === 'string' ? req.body.reason.trim() : '';
+    const reason =
+      typeof req.body?.reason === "string" ? req.body.reason.trim() : "";
     const meta = reason ? { reason } : {};
-    booking.log.push({ action: 'cancelled_by_laborer', by: req.user._id, meta });
+    booking.log.push({
+      action: "cancelled_by_laborer",
+      by: req.user._id,
+      meta,
+    });
     await booking.save();
     await Notification.create({
       recipient: booking.customer,
-      type: 'job_request',
-      title: 'Job Cancelled',
-      message: 'Your job has been cancelled by the laborer',
-      data: { bookingId: booking._id, status: booking.status, reason: reason || undefined }
+      type: "job_request",
+      title: "Job Cancelled",
+      message: "Your job has been cancelled by the laborer",
+      data: {
+        bookingId: booking._id,
+        status: booking.status,
+        reason: reason || undefined,
+      },
     });
     try {
-      await sendPushNotification(booking.customer, 'Job Cancelled', 'Your job has been cancelled by the laborer');
+      await sendPushNotification(
+        booking.customer,
+        "Job Cancelled",
+        "Your job has been cancelled by the laborer",
+      );
     } catch (pushErr) {
-      console.error('Push notification failed for booking decline:', pushErr);
+      console.error("Push notification failed for booking decline:", pushErr);
     }
     res.json(booking);
   } catch (error) {
@@ -284,22 +369,28 @@ const declineBooking = async (req, res) => {
 const startBooking = async (req, res) => {
   try {
     const booking = await Booking.findById(req.params.id);
-    if (!booking) return res.status(404).json({ message: 'Booking not found' });
+    if (!booking) return res.status(404).json({ message: "Booking not found" });
     if (booking.laborer.toString() !== req.user._id.toString()) {
-      return res.status(403).json({ message: 'Not authorized' });
+      return res.status(403).json({ message: "Not authorized" });
     }
-    if (booking.status !== 'Accepted') {
-      return res.status(400).json({ message: 'Only accepted bookings can be started' });
+    if (booking.status !== "Accepted") {
+      return res
+        .status(400)
+        .json({ message: "Only accepted bookings can be started" });
     }
-    booking.status = 'In Progress';
+    booking.status = "In Progress";
     booking.startedAt = new Date();
-    booking.log.push({ action: 'started', by: req.user._id, meta: { at: booking.startedAt } });
+    booking.log.push({
+      action: "started",
+      by: req.user._id,
+      meta: { at: booking.startedAt },
+    });
     await booking.save();
-    const laborerName = req.user.name || 'your laborer';
+    const laborerName = req.user.name || "your laborer";
     await Notification.create({
       recipient: booking.customer,
-      type: 'job_request',
-      title: 'Job In Progress',
+      type: "job_request",
+      title: "Job In Progress",
       message: `Your job has been started by ${laborerName}`,
       data: {
         bookingId: booking._id,
@@ -309,13 +400,17 @@ const startBooking = async (req, res) => {
         service: booking.service,
         scheduledAt: booking.scheduledAt,
         address: booking.location?.address,
-        compensation: booking.compensation
-      }
+        compensation: booking.compensation,
+      },
     });
     try {
-      await sendPushNotification(booking.customer, 'Job In Progress', `Your job has been started by ${laborerName}`);
+      await sendPushNotification(
+        booking.customer,
+        "Job In Progress",
+        `Your job has been started by ${laborerName}`,
+      );
     } catch (pushErr) {
-      console.error('Push notification failed for booking start:', pushErr);
+      console.error("Push notification failed for booking start:", pushErr);
     }
     res.json(booking);
   } catch (error) {
@@ -329,22 +424,24 @@ const startBooking = async (req, res) => {
 const completeBooking = async (req, res) => {
   try {
     const booking = await Booking.findById(req.params.id);
-    if (!booking) return res.status(404).json({ message: 'Booking not found' });
+    if (!booking) return res.status(404).json({ message: "Booking not found" });
     if (booking.laborer.toString() !== req.user._id.toString()) {
-      return res.status(403).json({ message: 'Not authorized' });
+      return res.status(403).json({ message: "Not authorized" });
     }
-    if (booking.status !== 'In Progress') {
-      return res.status(400).json({ message: 'Only in-progress bookings can be completed' });
+    if (booking.status !== "In Progress") {
+      return res
+        .status(400)
+        .json({ message: "Only in-progress bookings can be completed" });
     }
-    booking.status = 'Completed';
-    booking.paymentStatus = 'Paid';
-    booking.log.push({ action: 'completed', by: req.user._id });
+    booking.status = "Completed";
+    booking.paymentStatus = "Paid";
+    booking.log.push({ action: "completed", by: req.user._id });
     await booking.save();
-    const laborerName = req.user.name || 'your laborer';
+    const laborerName = req.user.name || "your laborer";
     await Notification.create({
       recipient: booking.customer,
-      type: 'job_request',
-      title: 'Job Completed',
+      type: "job_request",
+      title: "Job Completed",
       message: `Your job has been completed by ${laborerName}`,
       data: {
         bookingId: booking._id,
@@ -353,13 +450,17 @@ const completeBooking = async (req, res) => {
         service: booking.service,
         scheduledAt: booking.scheduledAt,
         address: booking.location?.address,
-        compensation: booking.compensation
-      }
+        compensation: booking.compensation,
+      },
     });
     try {
-      await sendPushNotification(booking.customer, 'Job Completed', `Your job has been completed by ${laborerName}`);
+      await sendPushNotification(
+        booking.customer,
+        "Job Completed",
+        `Your job has been completed by ${laborerName}`,
+      );
     } catch (pushErr) {
-      console.error('Push notification failed for booking complete:', pushErr);
+      console.error("Push notification failed for booking complete:", pushErr);
     }
     res.json(booking);
   } catch (error) {
@@ -371,34 +472,41 @@ const rateBooking = async (req, res) => {
   const session = await mongoose.startSession();
   session.startTransaction();
   try {
-    const principalId = (req.customer?._id) || (req.user?._id);
+    const principalId = req.customer?._id || req.user?._id;
     if (!principalId) {
       await session.abortTransaction().catch(() => {});
       session.endSession();
-      return res.status(401).json({ message: 'Not authorized' });
+      return res.status(401).json({ message: "Not authorized" });
     }
 
     const booking = await Booking.findById(req.params.id)
-      .populate('customer', 'firstName lastName name')
+      .populate("customer", "firstName lastName name")
       .session(session);
     if (!booking) {
       await session.abortTransaction().catch(() => {});
       session.endSession();
-      return res.status(404).json({ message: 'Booking not found' });
+      return res.status(404).json({ message: "Booking not found" });
     }
 
     const bookingCustomerId = booking.customer?._id || booking.customer;
-    if (!bookingCustomerId || bookingCustomerId.toString() !== principalId.toString()) {
+    if (
+      !bookingCustomerId ||
+      bookingCustomerId.toString() !== principalId.toString()
+    ) {
       await session.abortTransaction().catch(() => {});
       session.endSession();
-      return res.status(403).json({ message: 'Not authorized to rate this job' });
+      return res
+        .status(403)
+        .json({ message: "Not authorized to rate this job" });
     }
 
-    const statusNorm = (booking.status || '').toString().toLowerCase();
-    if (statusNorm !== 'completed') {
+    const statusNorm = (booking.status || "").toString().toLowerCase();
+    if (statusNorm !== "completed") {
       await session.abortTransaction().catch(() => {});
       session.endSession();
-      return res.status(400).json({ message: 'Only completed jobs can be rated' });
+      return res
+        .status(400)
+        .json({ message: "Only completed jobs can be rated" });
     }
 
     const existing = await JobRating.findOne({
@@ -408,7 +516,9 @@ const rateBooking = async (req, res) => {
     if (existing) {
       await session.abortTransaction().catch(() => {});
       session.endSession();
-      return res.status(400).json({ message: 'You have already rated this job' });
+      return res
+        .status(400)
+        .json({ message: "You have already rated this job" });
     }
 
     const oneMinuteAgo = new Date(Date.now() - 60 * 1000);
@@ -419,30 +529,38 @@ const rateBooking = async (req, res) => {
     if (recent) {
       await session.abortTransaction().catch(() => {});
       session.endSession();
-      return res.status(429).json({ message: 'You can only submit one rating per minute' });
+      return res
+        .status(429)
+        .json({ message: "You can only submit one rating per minute" });
     }
 
     const ratingValue = Number(req.body.rating);
     if (!Number.isInteger(ratingValue) || ratingValue < 1 || ratingValue > 5) {
       await session.abortTransaction().catch(() => {});
       session.endSession();
-      return res.status(400).json({ message: 'Rating must be an integer between 1 and 5' });
+      return res
+        .status(400)
+        .json({ message: "Rating must be an integer between 1 and 5" });
     }
 
-    let comment = '';
-    if (typeof req.body.comment === 'string') {
+    let comment = "";
+    if (typeof req.body.comment === "string") {
       comment = req.body.comment.trim();
       if (comment && comment.length < 10) {
         await session.abortTransaction().catch(() => {});
         session.endSession();
-        return res.status(400).json({ message: 'Comment must be at least 10 characters' });
+        return res
+          .status(400)
+          .json({ message: "Comment must be at least 10 characters" });
       }
       if (comment.length > 500) {
         await session.abortTransaction().catch(() => {});
         session.endSession();
-        return res.status(400).json({ message: 'Comment must be at most 500 characters' });
+        return res
+          .status(400)
+          .json({ message: "Comment must be at most 500 characters" });
       }
-      comment = comment.replace(/</g, '').replace(/>/g, '');
+      comment = comment.replace(/</g, "").replace(/>/g, "");
     }
 
     const stats = await JobRating.aggregate([
@@ -451,7 +569,7 @@ const rateBooking = async (req, res) => {
         $group: {
           _id: null,
           count: { $sum: 1 },
-          total: { $sum: '$rating' },
+          total: { $sum: "$rating" },
         },
       },
     ]).session(session);
@@ -469,7 +587,7 @@ const rateBooking = async (req, res) => {
           comment,
         },
       ],
-      { session }
+      { session },
     );
 
     const avg = calculateNewAverage(prevTotal, prevCount, ratingValue);
@@ -477,22 +595,24 @@ const rateBooking = async (req, res) => {
     await User.updateOne(
       { _id: booking.laborer },
       { $set: { rating: avg } },
-      { session }
+      { session },
     );
 
     const laborer = await User.findById(booking.laborer).session(session);
 
     const customerName =
       booking.customer.firstName ||
-      (booking.customer.name ? booking.customer.name.split(' ')[0] : 'Customer');
+      (booking.customer.name
+        ? booking.customer.name.split(" ")[0]
+        : "Customer");
 
     await Notification.create(
       [
         {
           recipient: booking.laborer,
-          type: 'rating_received',
-          title: 'New Rating Received',
-          message: `${customerName} rated you ${ratingValue} star${ratingValue === 1 ? '' : 's'}`,
+          type: "rating_received",
+          title: "New Rating Received",
+          message: `${customerName} rated you ${ratingValue} star${ratingValue === 1 ? "" : "s"}`,
           data: {
             bookingId: booking._id,
             rating: ratingValue,
@@ -501,34 +621,34 @@ const rateBooking = async (req, res) => {
           },
         },
       ],
-      { session }
+      { session },
     );
 
-    let pushStatus = 'skipped';
+    let pushStatus = "skipped";
     try {
       if (!laborer || laborer.notificationsEnabled === false) {
-        pushStatus = 'disabled';
+        pushStatus = "disabled";
       } else {
         await sendPushNotification(
           booking.laborer,
-          'New Rating Received',
-          `${customerName} rated you ${ratingValue} star${ratingValue === 1 ? '' : 's'}`
+          "New Rating Received",
+          `${customerName} rated you ${ratingValue} star${ratingValue === 1 ? "" : "s"}`,
         );
-        pushStatus = 'sent';
+        pushStatus = "sent";
       }
     } catch (pushErr) {
-      pushStatus = 'failed';
-      console.error('Push notification failed for rating:', pushErr);
+      pushStatus = "failed";
+      console.error("Push notification failed for rating:", pushErr);
     }
 
     console.log(
-      'Rating notification attempt',
+      "Rating notification attempt",
       JSON.stringify({
         laborerId: booking.laborer.toString(),
         bookingId: booking._id.toString(),
         rating: ratingValue,
         status: pushStatus,
-      })
+      }),
     );
 
     await session.commitTransaction();
@@ -545,7 +665,9 @@ const rateBooking = async (req, res) => {
     await session.abortTransaction().catch(() => {});
     session.endSession();
     if (error && error.code === 11000) {
-      return res.status(400).json({ message: 'You have already rated this job' });
+      return res
+        .status(400)
+        .json({ message: "You have already rated this job" });
     }
     res.status(400).json({ message: error.message });
   }
@@ -557,22 +679,26 @@ const rateBooking = async (req, res) => {
 const getBookingById = async (req, res) => {
   try {
     const booking = await Booking.findById(req.params.id)
-      .populate('customer', 'name profileImage phone email')
-      .populate('laborer', 'name profileImage phone');
-    if (!booking) return res.status(404).json({ message: 'Booking not found' });
+      .populate("customer", "name profileImage phone email")
+      .populate("laborer", "name profileImage phone");
+    if (!booking) return res.status(404).json({ message: "Booking not found" });
 
     const uid = req.user?._id ? req.user._id.toString() : undefined;
     const cid = req.customer?._id ? req.customer._id.toString() : undefined;
 
-    const customerId = booking.customer?._id ? booking.customer._id.toString() : undefined;
-    const laborerId = booking.laborer?._id ? booking.laborer._id.toString() : undefined;
+    const customerId = booking.customer?._id
+      ? booking.customer._id.toString()
+      : undefined;
+    const laborerId = booking.laborer?._id
+      ? booking.laborer._id.toString()
+      : undefined;
 
-    const isCustomer = !!customerId && (customerId === (cid || uid));
+    const isCustomer = !!customerId && customerId === (cid || uid);
     const isLaborer = !!uid && !!laborerId && laborerId === uid;
-    const isAdmin = !!req.user && req.user.role === 'admin';
+    const isAdmin = !!req.user && req.user.role === "admin";
 
     if (!isCustomer && !isLaborer && !isAdmin) {
-      return res.status(403).json({ message: 'Not authorized' });
+      return res.status(403).json({ message: "Not authorized" });
     }
 
     let myRating = null;
@@ -584,7 +710,7 @@ const getBookingById = async (req, res) => {
       if (ratingDoc) {
         myRating = {
           rating: ratingDoc.rating,
-          comment: ratingDoc.comment || '',
+          comment: ratingDoc.comment || "",
           createdAt: ratingDoc.createdAt,
         };
       }
@@ -605,22 +731,29 @@ const getBookingById = async (req, res) => {
 const cancelBooking = async (req, res) => {
   try {
     const booking = await Booking.findById(req.params.id);
-    if (!booking) return res.status(404).json({ message: 'Booking not found' });
-    const principalId = (req.customer?._id) || (req.user?._id);
-    if (!principalId || booking.customer.toString() !== principalId.toString()) return res.status(403).json({ message: 'Not authorized' });
-    const statusNorm = (booking.status || '').toString().toLowerCase();
-    if (statusNorm === 'accepted' || statusNorm === 'in progress' || statusNorm === 'completed') {
-      return res.status(400).json({ message: 'Cannot cancel a booking that has been accepted or completed' });
+    if (!booking) return res.status(404).json({ message: "Booking not found" });
+    const principalId = req.customer?._id || req.user?._id;
+    if (!principalId || booking.customer.toString() !== principalId.toString())
+      return res.status(403).json({ message: "Not authorized" });
+    const statusNorm = (booking.status || "").toString().toLowerCase();
+    if (
+      statusNorm === "accepted" ||
+      statusNorm === "in progress" ||
+      statusNorm === "completed"
+    ) {
+      return res.status(400).json({
+        message: "Cannot cancel a booking that has been accepted or completed",
+      });
     }
-    booking.status = 'Cancelled';
-    booking.log.push({ action: 'cancelled', by: principalId });
+    booking.status = "Cancelled";
+    booking.log.push({ action: "cancelled", by: principalId });
     await booking.save();
     await Notification.create({
       recipient: booking.laborer,
-      type: 'job_request',
-      title: 'Booking Cancelled',
+      type: "job_request",
+      title: "Booking Cancelled",
       message: `A ${booking.service} booking was cancelled`,
-      data: { bookingId: booking._id }
+      data: { bookingId: booking._id },
     });
     res.json(booking);
   } catch (error) {
@@ -635,30 +768,98 @@ const rescheduleBooking = async (req, res) => {
   try {
     const { scheduledAt, address, latitude, longitude } = req.body;
     const booking = await Booking.findById(req.params.id);
-    if (!booking) return res.status(404).json({ message: 'Booking not found' });
-    const principalId = (req.customer?._id) || (req.user?._id);
-    if (!principalId || booking.customer.toString() !== principalId.toString()) return res.status(403).json({ message: 'Not authorized' });
-    const statusNorm = (booking.status || '').toString().toLowerCase();
-    if (statusNorm === 'accepted' || statusNorm === 'in progress' || statusNorm === 'completed') {
-      return res.status(400).json({ message: 'Cannot reschedule a booking that has been accepted or completed' });
+    if (!booking) return res.status(404).json({ message: "Booking not found" });
+    const principalId = req.customer?._id || req.user?._id;
+    if (!principalId || booking.customer.toString() !== principalId.toString())
+      return res.status(403).json({ message: "Not authorized" });
+    const statusNorm = (booking.status || "").toString().toLowerCase();
+    if (
+      statusNorm === "accepted" ||
+      statusNorm === "in progress" ||
+      statusNorm === "completed"
+    ) {
+      return res.status(400).json({
+        message:
+          "Cannot reschedule a booking that has been accepted or completed",
+      });
     }
     if (scheduledAt) booking.scheduledAt = new Date(scheduledAt);
     if (address) booking.location.address = address;
     if (latitude != null) booking.location.latitude = latitude;
     if (longitude != null) booking.location.longitude = longitude;
-    booking.status = 'Rescheduled';
-    booking.log.push({ action: 'rescheduled', by: principalId, meta: { scheduledAt } });
+    booking.status = "Rescheduled";
+    booking.log.push({
+      action: "rescheduled",
+      by: principalId,
+      meta: { scheduledAt },
+    });
     await booking.save();
     await Notification.create({
       recipient: booking.laborer,
-      type: 'job_request',
-      title: 'Booking Rescheduled',
+      type: "job_request",
+      title: "Booking Rescheduled",
       message: `A ${booking.service} booking was rescheduled`,
-      data: { bookingId: booking._id, scheduledAt: booking.scheduledAt }
+      data: { bookingId: booking._id, scheduledAt: booking.scheduledAt },
     });
     res.json(booking);
   } catch (error) {
     res.status(400).json({ message: error.message });
+  }
+};
+
+/**
+ * @route   GET /api/bookings/check-accepted/:laborerId
+ * @desc    Check if the current customer has an accepted (or in-progress / completed) booking with a laborer
+ * @access  Private (customer)
+ */
+const checkAcceptedBooking = async (req, res) => {
+  try {
+    const customerId = req.customer?._id || req.user?._id;
+    if (!customerId) return res.status(401).json({ hasAcceptedBooking: false });
+
+    const exists = await Booking.exists({
+      customer: customerId,
+      laborer: req.params.laborerId,
+      status: { $in: ["Accepted", "In Progress", "Completed"] },
+    });
+
+    return res.json({ hasAcceptedBooking: !!exists });
+  } catch (err) {
+    console.error("[checkAcceptedBooking]", err);
+    return res.status(500).json({ hasAcceptedBooking: false });
+  }
+};
+
+/**
+ * @route   POST /api/bookings/:id/photos
+ * @desc    Attach work photos uploaded by customer to a booking
+ * @access  Private (customer)
+ */
+const uploadBookingPhotos = async (req, res) => {
+  try {
+    const customerId = req.customer?._id || req.user?._id;
+    if (!customerId) return res.status(401).json({ message: "Not authorized" });
+
+    const booking = await Booking.findById(req.params.id);
+    if (!booking) return res.status(404).json({ message: "Booking not found" });
+
+    // Only the booking owner can upload photos
+    if (booking.customer.toString() !== customerId.toString()) {
+      return res.status(403).json({ message: "Forbidden" });
+    }
+
+    if (!req.files || req.files.length === 0) {
+      return res.status(400).json({ message: "No files uploaded" });
+    }
+
+    const urls = req.files.map((f) => `/uploads/${f.filename}`);
+    booking.workPhotos.push(...urls);
+    await booking.save();
+
+    return res.json({ workPhotos: booking.workPhotos });
+  } catch (err) {
+    console.error("[uploadBookingPhotos]", err);
+    return res.status(500).json({ message: err.message });
   }
 };
 
@@ -675,5 +876,7 @@ module.exports = {
   rateBooking,
   cancelBooking,
   rescheduleBooking,
-  getBookingById
+  getBookingById,
+  checkAcceptedBooking,
+  uploadBookingPhotos,
 };

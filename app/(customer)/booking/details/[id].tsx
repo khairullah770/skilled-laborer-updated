@@ -245,18 +245,26 @@ export default function BookingDetailsScreen() {
                             <Text style={[styles.rateText, { color: '#1F41BB' }]}>{`Rs ${booking.compensation}`}</Text>
                         </View>
                         <View style={styles.actionIcons}>
-                            <TouchableOpacity
-                                style={[styles.iconCircle, { backgroundColor: '#EBF0FF' }]}
-                                onPress={openWhatsApp}
-                            >
-                                <Ionicons name="call" size={22} color="#1F41BB" />
-                            </TouchableOpacity>
-                            <TouchableOpacity
-                                style={[styles.iconCircle, { backgroundColor: '#EBF0FF' }]}
-                                onPress={openWhatsApp}
-                            >
-                                <Ionicons name="chatbubble-ellipses" size={22} color="#1F41BB" />
-                            </TouchableOpacity>
+                            {(isAccepted || isCompleted) ? (
+                                <>
+                                    <TouchableOpacity
+                                        style={[styles.iconCircle, { backgroundColor: '#EBF0FF' }]}
+                                        onPress={openWhatsApp}
+                                    >
+                                        <Ionicons name="call" size={22} color="#1F41BB" />
+                                    </TouchableOpacity>
+                                    <TouchableOpacity
+                                        style={[styles.iconCircle, { backgroundColor: '#EBF0FF' }]}
+                                        onPress={openWhatsApp}
+                                    >
+                                        <Ionicons name="chatbubble-ellipses" size={22} color="#1F41BB" />
+                                    </TouchableOpacity>
+                                </>
+                            ) : (
+                                <View style={styles.contactLockedBadge}>
+                                    <Ionicons name="lock-closed" size={14} color="#9CA3AF" />
+                                </View>
+                            )}
                         </View>
                     </View>
 
@@ -527,6 +535,15 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         marginLeft: 10,
     },
+    contactLockedBadge: {
+        width: 36,
+        height: 36,
+        borderRadius: 18,
+        backgroundColor: '#F3F4F6',
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginLeft: 10,
+    },
     acceptedBadgeContainer: {
         justifyContent: 'center',
         alignItems: 'center',
@@ -559,6 +576,9 @@ const styles = StyleSheet.create({
     },
     rescheduleButton: {
         backgroundColor: '#1F41BB',
+    },
+    actionButtonDisabled: {
+        opacity: 0.6,
     },
     cancelButtonText: {
         color: '#FFF',

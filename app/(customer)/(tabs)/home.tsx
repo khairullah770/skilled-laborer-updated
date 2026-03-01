@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Location from 'expo-location';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Dimensions, FlatList, Image, Modal, Pressable, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Dimensions, FlatList, Image, Modal, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import MapView, { PROVIDER_GOOGLE, Region } from 'react-native-maps';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import ServiceCard from '../../../components/ServiceCard';
@@ -37,8 +37,7 @@ export default function HomeScreen() {
   const [searchLoading, setSearchLoading] = useState(false);
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [activeAdIndex, setActiveAdIndex] = useState(0);
-  const [isFilterVisible, setIsFilterVisible] = useState(false);
-  const [selectedFilters, setSelectedFilters] = useState<string[]>(['nearest']);
+
   const flatListRef = useRef<FlatList>(null);
 
   const [categories, setCategories] = useState<BackendCategory[]>([]);
@@ -53,21 +52,10 @@ export default function HomeScreen() {
   const [selectedLocation, setSelectedLocation] = useState({ latitude: 33.6844, longitude: 73.0479 });
   const [address, setAddress] = useState<string>('');
   const mapRef = useRef<MapView>(null);
+  const locationSearchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const locationAbortRef = useRef<AbortController | null>(null);
 
-  const sortOptions = [
-    { id: 'price_high_low', label: 'Price (High to Low)', icon: 'trending-down' },
-    { id: 'price_low_high', label: 'Price (Low to High)', icon: 'trending-up' },
-    { id: 'ratings', label: 'Ratings (Highest to Lowest)', icon: 'star' },
-    { id: 'nearest', label: 'Nearest Location', icon: 'location' },
-  ];
 
-  const toggleFilter = (id: string) => {
-    setSelectedFilters(prev =>
-      prev.includes(id)
-        ? prev.filter(f => f !== id)
-        : [...prev, id]
-    );
-  };
 
   useEffect(() => {
     fetchCategories();
@@ -198,9 +186,7 @@ export default function HomeScreen() {
           onChangeText={handleSearchChange}
           placeholderTextColor="#9CA3AF"
         />
-        <TouchableOpacity style={styles.filterButton} onPress={() => setIsFilterVisible(true)}>
-          <Ionicons name="options-outline" size={20} color="#1F41BB" />
-        </TouchableOpacity>
+
       </View>
 
       {/* Search Results Dropdown */}
@@ -220,11 +206,24 @@ export default function HomeScreen() {
                   setSearchResults([]);
                   router.push({
                     pathname: '/(customer)/subcategory/[id]',
-                    params: { id: item._id, title: item.name },
+                    params: {
+                      id: item._id,
+                      title: item.name,
+                      customerLat: String(selectedLocation.latitude),
+                      customerLng: String(selectedLocation.longitude),
+                    },
                   });
                 }}
               >
-                <Ionicons name="construct-outline" size={18} color="#1F41BB" style={{ marginRight: 10 }} />
+                {item.picture ? (
+                  <Image
+                    source={{ uri: getImageUrl(item.picture) }}
+                    style={{ width: 36, height: 36, borderRadius: 8, marginRight: 10, backgroundColor: '#F3F4F6' }}
+                    resizeMode="cover"
+                  />
+                ) : (
+                  <Ionicons name="construct-outline" size={18} color="#1F41BB" style={{ marginRight: 10 }} />
+                )}
                 <View style={{ flex: 1 }}>
                   <Text style={styles.searchResultName}>{item.name}</Text>
                   {item.category?.name && (
@@ -238,60 +237,7 @@ export default function HomeScreen() {
         </View>
       )}
 
-      {/* Filter Modal */}
-      <Modal
-        visible={isFilterVisible}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setIsFilterVisible(false)}
-      >
-        <Pressable
-          style={styles.modalBackdrop}
-          onPress={() => setIsFilterVisible(false)}
-        />
-        <View style={styles.filterSheet}>
-          <View style={styles.filterHeader}>
-            <Text style={styles.filterTitle}>Sort & Filter</Text>
-            <TouchableOpacity onPress={() => setIsFilterVisible(false)}>
-              <Ionicons name="close" size={24} color="#374151" />
-            </TouchableOpacity>
-          </View>
 
-          {sortOptions.map((option) => (
-            <TouchableOpacity
-              key={option.id}
-              style={[
-                styles.sortOption,
-                selectedFilters.includes(option.id) && styles.sortOptionSelected
-              ]}
-              onPress={() => toggleFilter(option.id)}
-            >
-              <View style={styles.optionLeft}>
-                <Ionicons
-                  name={option.icon as any}
-                  size={20}
-                  color={selectedFilters.includes(option.id) ? '#1F41BB' : '#6B7280'}
-                  style={styles.optionIcon}
-                />
-                <Text style={[
-                  styles.optionLabel,
-                  selectedFilters.includes(option.id) && styles.optionLabelSelected
-                ]}>{option.label}</Text>
-              </View>
-              {selectedFilters.includes(option.id) && (
-                <Ionicons name="checkmark-circle" size={20} color="#1F41BB" />
-              )}
-            </TouchableOpacity>
-          ))}
-
-          <TouchableOpacity
-            style={styles.applyButton}
-            onPress={() => setIsFilterVisible(false)}
-          >
-            <Text style={styles.applyButtonText}>Apply Filters ({selectedFilters.length})</Text>
-          </TouchableOpacity>
-        </View>
-      </Modal>
 
       <FlatList
         style={{ backgroundColor: colorScheme === 'dark' ? '#121212' : '#F3F4F6' }}
@@ -377,29 +323,73 @@ export default function HomeScreen() {
                 style={styles.locationSearch}
                 placeholder="Search location..."
                 value={searchQuery}
-                onChangeText={async (text) => {
+                onChangeText={(text) => {
                   setSearchQuery(text);
-                  if (!text.trim()) {
+                  // Clear previous timer & request
+                  if (locationSearchTimer.current) clearTimeout(locationSearchTimer.current);
+                  if (locationAbortRef.current) locationAbortRef.current.abort();
+
+                  if (!text.trim() || text.length < 3) {
                     setSuggestions([]);
+                    setIsSearching(false);
                     return;
                   }
                   setIsSearching(true);
-                  try {
-                    const response = await fetch(
-                      `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(text)}&limit=5&addressdetails=1&countrycodes=pk&accept-language=en`,
-                      { headers: { 'User-Agent': 'SkilledLaborApp/1.0', 'Accept-Language': 'en' } }
-                    );
-                    const data = await response.json();
-                    setSuggestions(data);
-                  } catch (e) {
-                    setSuggestions([]);
-                  } finally {
-                    setIsSearching(false);
-                  }
+                  locationSearchTimer.current = setTimeout(async () => {
+                    const controller = new AbortController();
+                    locationAbortRef.current = controller;
+                    const timeout = setTimeout(() => controller.abort(), 8000);
+                    try {
+                      const response = await fetch(
+                        `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(text)}&limit=5&addressdetails=1&countrycodes=pk&accept-language=en`,
+                        {
+                          signal: controller.signal,
+                          headers: { 'User-Agent': 'SkilledLaborApp/1.0 (contact@skilledlabor.pk)', 'Accept': 'application/json' },
+                        }
+                      );
+                      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                      const data = await response.json();
+                      if (!controller.signal.aborted) {
+                        setSuggestions(data || []);
+                      }
+                    } catch (e: any) {
+                      if (e?.name !== 'AbortError') {
+                        console.error('[LocationSearch] Error:', e?.message);
+                        // Fallback: try expo-location geocoding
+                        try {
+                          const geo = await Location.geocodeAsync(text);
+                          if (geo.length > 0) {
+                            setSuggestions(geo.map((g, i) => ({
+                              place_id: Date.now() + i,
+                              display_name: `${text} (${g.latitude.toFixed(4)}, ${g.longitude.toFixed(4)})`,
+                              lat: String(g.latitude),
+                              lon: String(g.longitude),
+                            })));
+                          } else {
+                            setSuggestions([]);
+                          }
+                        } catch {
+                          setSuggestions([]);
+                        }
+                      }
+                    } finally {
+                      clearTimeout(timeout);
+                      if (!controller.signal.aborted) setIsSearching(false);
+                    }
+                  }, 800);
                 }}
                 returnKeyType="search"
               />
-              {isSearching ? <ActivityIndicator size="small" color="#1F41BB" style={{ marginRight: 8 }} /> : null}
+              {isSearching ? (
+                <ActivityIndicator size="small" color="#1F41BB" style={{ marginRight: 8 }} />
+              ) : searchQuery.length > 0 ? (
+                <TouchableOpacity
+                  onPress={() => { setSearchQuery(''); setSuggestions([]); }}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                >
+                  <Ionicons name="close-circle" size={20} color="#9CA3AF" style={{ marginRight: 10 }} />
+                </TouchableOpacity>
+              ) : null}
             </View>
             {suggestions.length > 0 && (
               <View style={styles.suggestionsContainer}>
@@ -621,6 +611,8 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     marginTop: 8,
     maxHeight: 160,
+    elevation: 10,
+    zIndex: 999,
   },
   suggestionItem: {
     flexDirection: 'row',
@@ -698,9 +690,6 @@ const styles = StyleSheet.create({
     height: '100%',
     fontSize: 16,
     color: '#374151',
-  },
-  filterButton: {
-    padding: 5,
   },
   searchDropdown: {
     position: 'absolute',
@@ -824,72 +813,5 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 4,
   },
-  modalBackdrop: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-  },
-  filterSheet: {
-    backgroundColor: '#FFFFFF',
-    borderTopLeftRadius: 30,
-    borderTopRightRadius: 30,
-    padding: 24,
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    paddingBottom: 40,
-  },
-  filterHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 25,
-  },
-  filterTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#111827',
-  },
-  sortOption: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 15,
-    paddingHorizontal: 15,
-    borderRadius: 12,
-    marginBottom: 10,
-    backgroundColor: '#F9FAFB',
-  },
-  sortOptionSelected: {
-    backgroundColor: '#F0F4FF',
-    borderWidth: 1,
-    borderColor: '#1F41BB',
-  },
-  optionLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  optionIcon: {
-    marginRight: 12,
-  },
-  optionLabel: {
-    fontSize: 16,
-    color: '#374151',
-  },
-  optionLabelSelected: {
-    color: '#1F41BB',
-    fontWeight: '600',
-  },
-  applyButton: {
-    backgroundColor: '#1F41BB',
-    paddingVertical: 16,
-    borderRadius: 12,
-    alignItems: 'center',
-    marginTop: 20,
-  },
-  applyButtonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
+
 });

@@ -1,4 +1,4 @@
-export const API_URL = 'http://10.141.204.228:5000';
+export const API_URL = "http://192.168.18.122:5000";
 
 export interface ApiFetchOptions {
   method?: string;
@@ -17,10 +17,10 @@ export interface ApiFetchResult<T> {
 
 export async function apiFetchJson<T = any>(
   path: string,
-  options: ApiFetchOptions = {}
+  options: ApiFetchOptions = {},
 ): Promise<ApiFetchResult<T>> {
   const {
-    method = 'GET',
+    method = "GET",
     headers = {},
     body,
     token,
@@ -46,19 +46,19 @@ export async function apiFetchJson<T = any>(
       let requestBody = body as any;
 
       const isFormData =
-        typeof FormData !== 'undefined' && body instanceof FormData;
+        typeof FormData !== "undefined" && body instanceof FormData;
 
       if (
         body != null &&
-        typeof body === 'object' &&
+        typeof body === "object" &&
         !isFormData &&
-        !finalHeaders['Content-Type']
+        !finalHeaders["Content-Type"]
       ) {
-        finalHeaders['Content-Type'] = 'application/json';
+        finalHeaders["Content-Type"] = "application/json";
         requestBody = JSON.stringify(body);
       }
 
-      console.log('apiFetchJson request', { method, url });
+      console.log("apiFetchJson request", { method, url });
 
       const res = await fetch(url, {
         method,
@@ -70,13 +70,13 @@ export async function apiFetchJson<T = any>(
       clearTimeout(timeout);
 
       const text = await res.text();
-      const contentType = res.headers.get('content-type') || '';
+      const contentType = res.headers.get("content-type") || "";
       const isJson =
-        contentType.includes('application/json') ||
-        contentType.includes('+json');
+        contentType.includes("application/json") ||
+        contentType.includes("+json");
       const parsed = text && isJson ? JSON.parse(text) : (text as any);
 
-      console.log('apiFetchJson response', {
+      console.log("apiFetchJson response", {
         method,
         url,
         status: res.status,
@@ -84,9 +84,9 @@ export async function apiFetchJson<T = any>(
 
       if (!res.ok) {
         const error: any = new Error(
-          parsed && typeof parsed === 'object' && parsed.message
+          parsed && typeof parsed === "object" && parsed.message
             ? parsed.message
-            : `Request failed with status ${res.status}`
+            : `Request failed with status ${res.status}`,
         );
         error.status = res.status;
         error.body = parsed;
@@ -98,18 +98,18 @@ export async function apiFetchJson<T = any>(
       clearTimeout(timeout);
       lastError = err;
 
-      const name = err?.name || 'Error';
-      const isTimeout = name === 'AbortError';
+      const name = err?.name || "Error";
+      const isTimeout = name === "AbortError";
       const isNetwork = !err?.status;
 
-      console.log('apiFetchJson error', { method, url, name });
+      console.log("apiFetchJson error", { method, url, name });
 
       if (attempt === retries || (!isTimeout && !isNetwork)) {
         throw err;
       }
 
       const delay = retryDelayMs * (attempt + 1);
-      await new Promise(resolve => setTimeout(resolve, delay));
+      await new Promise((resolve) => setTimeout(resolve, delay));
       attempt += 1;
     }
   }
