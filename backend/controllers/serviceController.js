@@ -154,10 +154,9 @@ module.exports = {
       if (maxPrice != null)
         q.price = Object.assign(q.price || {}, { $lte: Number(maxPrice) });
       const skip = (Number(page) - 1) * Number(limit);
+      // Fetch all matching offerings first (pagination applied after sorting)
       let offerings = await ServiceOffering.find(q)
         .sort({ updatedAt: -1 })
-        .skip(skip)
-        .limit(Number(limit))
         .populate("subcategory", "name minPrice maxPrice");
       if (offerings.length === 0) {
         try {
@@ -173,8 +172,6 @@ module.exports = {
                 isActive: true,
               })
                 .sort({ updatedAt: -1 })
-                .skip(skip)
-                .limit(Number(limit))
                 .populate("subcategory", "name minPrice maxPrice");
             }
           }
@@ -289,6 +286,11 @@ module.exports = {
               case "ratings":
                 diff = (b.profile?.rating || 0) - (a.profile?.rating || 0);
                 break;
+              case "most_jobs":
+                diff =
+                  (b.profile?.completedJobs || 0) -
+                  (a.profile?.completedJobs || 0);
+                break;
               case "nearest":
                 diff = (a.distanceKm ?? 99999) - (b.distanceKm ?? 99999);
                 break;
@@ -299,12 +301,17 @@ module.exports = {
         });
       }
 
+      // Apply pagination AFTER sorting so the full result set is properly ordered
+      const totalCount = data.length;
+      const paginatedData = data.slice(skip, skip + Number(limit));
+
       if (debug === "true") {
         return res.json({
-          results: data,
+          results: paginatedData,
           page: Number(page),
           limit: Number(limit),
-          count: data.length,
+          count: paginatedData.length,
+          totalCount,
           meta: {
             offeringsCount: offerings.length,
             usersFetched: users.length,
@@ -314,10 +321,11 @@ module.exports = {
         });
       }
       res.json({
-        results: data,
+        results: paginatedData,
         page: Number(page),
         limit: Number(limit),
-        count: data.length,
+        count: paginatedData.length,
+        totalCount,
       });
     } catch (error) {
       res.status(500).json({ message: error.message || "Server error" });

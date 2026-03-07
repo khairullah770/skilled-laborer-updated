@@ -23,6 +23,7 @@ const sortOptions = [
     { id: 'price_high_low', label: 'Price: High to Low', icon: 'arrow-up-circle-outline' as const },
     { id: 'price_low_high', label: 'Price: Low to High', icon: 'arrow-down-circle-outline' as const },
     { id: 'ratings', label: 'Ratings', icon: 'star-outline' as const },
+    { id: 'most_jobs', label: 'Most Jobs', icon: 'briefcase-outline' as const },
 ];
 const PRICE_IDS = ['price_high_low', 'price_low_high'];
 
@@ -115,11 +116,13 @@ export default function SubCategoryDetailsScreen() {
                 params.append('nearLng', String(loc.lng));
                 params.append('radiusKm', '5');
             }
-            // Always sort by nearest first, then user‑selected sorts
-            const sortParts: string[] = ['nearest'];
+            // User-selected sorts take priority; nearest is a tiebreaker
+            const sortParts: string[] = [];
             if (activeFilters.includes('price_high_low')) sortParts.push('price_high_low');
             if (activeFilters.includes('price_low_high')) sortParts.push('price_low_high');
             if (activeFilters.includes('ratings')) sortParts.push('ratings');
+            if (activeFilters.includes('most_jobs')) sortParts.push('most_jobs');
+            sortParts.push('nearest'); // always use nearest as final tiebreaker
             params.append('sortBy', sortParts.join(','));
             params.append('onlineOnly', 'false');
             params.append('includeUnapproved', 'false');
@@ -143,7 +146,8 @@ export default function SubCategoryDetailsScreen() {
                 completedJobs: r.profile?.completedJobs ?? 0,
             }));
             setItems(prev => (reset ? mapped : [...prev, ...mapped]));
-            setHasMore((data.results || []).length === 20);
+            const totalSoFar = reset ? mapped.length : (items.length + mapped.length);
+            setHasMore(data.totalCount != null ? totalSoFar < data.totalCount : (data.results || []).length === 20);
             setPage(targetPage);
         } catch {
         } finally {

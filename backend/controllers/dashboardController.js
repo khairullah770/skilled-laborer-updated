@@ -61,10 +61,18 @@ const getLaborerStats = async (req, res) => {
       (acc, booking) => acc + (booking.compensation || 0),
       0,
     );
-    const totalCompletedJobs = allCompletedBookings.length;
 
-    // Get the laborer's current rating from the User document
+    // Get the laborer's current rating and completedJobs from the User document
+    // These are the authoritative values, kept in sync by completeBooking and rateBooking
     const user = await User.findById(laborerId);
+
+    // Use the higher of the two sources for completed jobs:
+    // - User.completedJobs (incremented on each completion)
+    // - Actual Booking count (ground truth from DB)
+    const totalCompletedJobs = Math.max(
+      user?.completedJobs || 0,
+      allCompletedBookings.length,
+    );
 
     // Get real rating stats from JobRating collection
     const ratingStats = await JobRating.aggregate([
@@ -79,8 +87,12 @@ const getLaborerStats = async (req, res) => {
     ]);
 
     const totalReviews = ratingStats[0]?.count || 0;
+    // Use JobRating-computed average if reviews exist, otherwise fall back to User.rating
+    // (User.rating is kept in sync by rateBooking and may also reflect seeded/imported data)
     const avgRating =
-      totalReviews > 0 ? ratingStats[0].total / totalReviews : 0;
+      totalReviews > 0
+        ? ratingStats[0].total / totalReviews
+        : user?.rating || 0;
 
     // Get real rating breakdown from JobRating collection
     const breakdownAgg = await JobRating.aggregate([

@@ -5,6 +5,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Dimensions, FlatList, Image, Modal, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import MapView, { PROVIDER_GOOGLE, Region } from 'react-native-maps';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import ChatBot from '../../../components/ChatBot';
 import ServiceCard from '../../../components/ServiceCard';
 
 import { useRouter } from 'expo-router';
@@ -45,6 +46,7 @@ export default function HomeScreen() {
   const [locationLoading, setLocationLoading] = useState(false);
   const [locationError, setLocationError] = useState<string | null>(null);
   const [showLocationPicker, setShowLocationPicker] = useState(false);
+  const [showChatBot, setShowChatBot] = useState(false);
   const [locationPermission, setLocationPermission] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearching, setIsSearching] = useState(false);
@@ -503,6 +505,28 @@ export default function HomeScreen() {
           </View>
         </SafeAreaView>
       </Modal>
+
+      {/* AI Chatbot FAB */}
+      {!showChatBot && (
+        <TouchableOpacity
+          style={styles.chatFab}
+          onPress={() => setShowChatBot(true)}
+          activeOpacity={0.85}
+        >
+          <Ionicons name="chatbubble-ellipses" size={26} color="#fff" />
+        </TouchableOpacity>
+      )}
+
+      {/* AI Chatbot Overlay */}
+      <ChatBot
+        visible={showChatBot}
+        onClose={() => setShowChatBot(false)}
+        customerLocation={{
+          latitude: selectedLocation.latitude,
+          longitude: selectedLocation.longitude,
+          address: address || undefined,
+        }}
+      />
     </SafeAreaView>
   );
 }
@@ -812,6 +836,23 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
+  },
+  chatFab: {
+    position: 'absolute',
+    bottom: 25,
+    right: 20,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#1F41BB',
+    justifyContent: 'center',
+    alignItems: 'center',
+    elevation: 8,
+    shadowColor: '#1F41BB',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.35,
+    shadowRadius: 8,
+    zIndex: 50,
   },
 
 });

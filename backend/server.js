@@ -40,6 +40,7 @@ app.use("/api/bookings", require("./routes/bookingRoutes"));
 app.use("/api/dashboard", require("./routes/dashboardRoutes"));
 app.use("/api/services", require("./routes/serviceRoutes"));
 app.use("/api/chat", require("./routes/chatRoutes"));
+app.use("/api/chatbot", require("./routes/chatbotRoutes"));
 
 app.use(errorHandler);
 

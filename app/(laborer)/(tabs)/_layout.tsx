@@ -11,7 +11,7 @@ function TabBarIcon(props: {
     name: React.ComponentProps<typeof Ionicons>['name'];
     color: string;
 }) {
-    return <Ionicons size={28} style={{ marginBottom: -3 }} {...props} />;
+    return <Ionicons size={24} style={{ marginBottom: -3 }} {...props} />;
 }
 
 function NotificationTabIcon(props: { color: string }) {
@@ -39,8 +39,8 @@ function NotificationTabIcon(props: { color: string }) {
     );
 
     return (
-        <View style={{ width: 32, height: 32, justifyContent: 'center', alignItems: 'center' }}>
-            <Ionicons size={28} style={{ marginBottom: -3 }} name="notifications" color={props.color} />
+        <View style={{ width: 28, height: 28, justifyContent: 'center', alignItems: 'center' }}>
+            <Ionicons size={24} style={{ marginBottom: -3 }} name="notifications" color={props.color} />
             {unread > 0 && (
                 <View
                     style={{
@@ -69,8 +69,8 @@ function ChatTabIcon(props: { color: string }) {
     const { totalUnread } = useSocket();
 
     return (
-        <View style={{ width: 32, height: 32, justifyContent: 'center', alignItems: 'center' }}>
-            <Ionicons size={28} style={{ marginBottom: -3 }} name="chatbubbles" color={props.color} />
+        <View style={{ width: 28, height: 28, justifyContent: 'center', alignItems: 'center' }}>
+            <Ionicons size={24} style={{ marginBottom: -3 }} name="chatbubbles" color={props.color} />
             {totalUnread > 0 && (
                 <View
                     style={{
@@ -111,13 +111,17 @@ export default function TabLayout() {
                 tabBarStyle: {
                     backgroundColor: '#1F41BB',
                     borderTopWidth: 0,
-                    height: 60,
-                    paddingBottom: 5,
-                    paddingTop: 5,
+                    height: 70,
+                    paddingBottom: 10,
+                    paddingTop: 6,
                 },
                 tabBarLabelStyle: {
-                    fontSize: 12,
+                    fontSize: 10,
                     fontWeight: '600',
+                },
+                tabBarItemStyle: {
+                    paddingHorizontal: 0,
+                    minWidth: 0,
                 },
                 headerShown: false,
             }}>
@@ -152,7 +156,7 @@ export default function TabLayout() {
             <Tabs.Screen
                 name="notification"
                 options={{
-                    title: 'Notification',
+                    title: 'Notify',
                     tabBarIcon: ({ color }) => <NotificationTabIcon color={color} />,
                 }}
             />
