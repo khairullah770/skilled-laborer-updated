@@ -93,6 +93,15 @@ async function callGemini(systemPrompt, conversationHistory, retries = 3) {
           continue;
         }
 
+        // 401 = auth error, no point trying other models
+        if (res.status === 401) {
+          const errBody = await res.text();
+          console.error(`OpenRouter auth error (401): ${errBody}`);
+          throw new Error(
+            "OpenRouter API key is invalid or expired. Please update OPENROUTER_API_KEY in your .env file. Get a new key at https://openrouter.ai/keys",
+          );
+        }
+
         // 404 = model unavailable, skip to next
         if (res.status === 404) {
           console.warn(`${model} not available, trying next model...`);

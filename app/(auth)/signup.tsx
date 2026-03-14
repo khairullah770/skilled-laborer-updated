@@ -307,7 +307,7 @@ const styles = StyleSheet.create({
     },
     title: {
         fontSize: 22,
-        fontWeight: '700',
+        fontWeight: '800',
         color: '#1F41BB',
         marginTop: 40,
         alignSelf: 'center',// Keep title centered if that's preferred, or let it follow header

@@ -37,7 +37,7 @@ export default function RoleSelectionScreen() {
 
                 <View style={styles.buttonsContainer}>
                     <TouchableOpacity style={[styles.button, styles.primaryButton]} onPress={goToCustomerLogin}>
-                        <Text style={styles.primaryButtonText}>I'm a customer</Text>
+                        <Text style={styles.primaryButtonText}>I'm a Customer</Text>
                     </TouchableOpacity>
 
                     <TouchableOpacity style={[styles.button, styles.secondaryButton]} onPress={goToLaborerLogin}>

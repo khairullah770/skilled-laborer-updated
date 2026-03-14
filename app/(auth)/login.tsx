@@ -159,7 +159,7 @@ export default function CustomerLoginScreen() {
                             />
                         </View>
 
-                        <Text style={styles.welcomeText}>Customer login</Text>
+                        <Text style={styles.welcomeText}>Customer Login</Text>
 
 
                         <View style={styles.form}>
@@ -290,7 +290,7 @@ const styles = StyleSheet.create({
     },
     welcomeText: {
         fontSize: 24,
-        fontWeight: '700',
+        fontWeight: '800',
         color: '#1F41BB',
         textAlign: 'center',
         marginBottom: 38,

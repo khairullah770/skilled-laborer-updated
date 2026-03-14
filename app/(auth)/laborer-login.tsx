@@ -290,7 +290,7 @@ const styles = StyleSheet.create({
     },
     welcomeText: {
         fontSize: 24,
-        fontWeight: 'bold',
+        fontWeight: '800',
         color: '#1F41BB',
         textAlign: 'center',
         marginBottom: 28,
