@@ -1,4 +1,4 @@
-export const API_URL = "http://192.168.18.122:5000";
+export const API_URL = "http://10.141.10.99:5000";
 
 export interface ApiFetchOptions {
   method?: string;

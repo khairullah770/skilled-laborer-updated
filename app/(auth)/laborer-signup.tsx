@@ -361,7 +361,7 @@ const styles = StyleSheet.create({
     },
     title: {
         fontSize: 22,
-        fontWeight: '900',
+        fontWeight: '800',
         color: '#1F41BB',
         marginTop: 10,
         letterSpacing: 1,
