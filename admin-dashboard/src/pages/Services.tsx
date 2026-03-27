@@ -92,6 +92,7 @@ const Services = () => {
 
   useEffect(() => {
     if (editingSubcategory) {
+      setSelectedCategoryId(editingSubcategory.category);
       setSubcategoryName(editingSubcategory.name);
       setSubcategoryDesc(editingSubcategory.description);
       setSubcategoryMinPrice(editingSubcategory.minPrice.toString());
@@ -154,7 +155,10 @@ const Services = () => {
 
   const handleSubcategorySubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedCategoryId) return;
+    if (!editingSubcategory && !selectedCategoryId) {
+      alert('Please select a category first.');
+      return;
+    }
 
     // Validation
     const min = parseFloat(subcategoryMinPrice);
@@ -172,7 +176,9 @@ const Services = () => {
 
     try {
       const formData = new FormData();
-      formData.append('categoryId', selectedCategoryId);
+      if (!editingSubcategory && selectedCategoryId) {
+        formData.append('categoryId', selectedCategoryId);
+      }
       formData.append('name', subcategoryName);
       formData.append('description', subcategoryDesc);
       formData.append('minPrice', subcategoryMinPrice);
@@ -442,6 +448,7 @@ const Services = () => {
                           <div className="flex items-center space-x-1 opacity-0 group-hover:opacity-100 transition-opacity">
                             <button
                               onClick={() => {
+                                setSelectedCategoryId(category._id);
                                 setEditingSubcategory(sub);
                                 setIsSubcategoryModalOpen(true);
                               }}

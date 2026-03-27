@@ -38,6 +38,7 @@ export default function VerificationDetailsScreen() {
     const [idCardImage, setIdCardImage] = useState<string | null>(null);
     const [loading, setLoading] = useState(false);
     const [isCategoryModalVisible, setIsCategoryModalVisible] = useState(false);
+    const [pendingCategoryId, setPendingCategoryId] = useState<string | null>(null);
 
     const [status, setStatus] = useState<'unverified' | 'pending' | 'approved' | 'rejected'>('unverified');
     const [rejectionReason, setRejectionReason] = useState<string | null>(null);
@@ -205,6 +206,27 @@ export default function VerificationDetailsScreen() {
             setSelectedCategoryIds([id]);
             setErrors(prev => ({ ...prev, categories: '' }));
         }
+    };
+
+    const openCategoryModal = () => {
+        setPendingCategoryId(selectedCategoryIds[0] || null);
+        setIsCategoryModalVisible(true);
+    };
+
+    const closeCategoryModal = () => {
+        setPendingCategoryId(null);
+        setIsCategoryModalVisible(false);
+    };
+
+    const confirmCategorySelection = () => {
+        if (!pendingCategoryId) {
+            setErrors(prev => ({ ...prev, categories: 'Please select a category and tap Select' }));
+            return;
+        }
+
+        toggleCategory(pendingCategoryId);
+        setPendingCategoryId(null);
+        setIsCategoryModalVisible(false);
     };
 
     const getSelectedCategoryNames = () => {
@@ -573,7 +595,7 @@ export default function VerificationDetailsScreen() {
                         <View style={styles.inputContainer}>
                             <Text style={styles.inputLabel}>Category / Skill</Text>
                             <TouchableOpacity
-                                onPress={() => setIsCategoryModalVisible(true)}
+                                onPress={openCategoryModal}
                                 activeOpacity={0.7}
                             >
                                 <View pointerEvents="none">
@@ -631,13 +653,13 @@ export default function VerificationDetailsScreen() {
                 visible={isCategoryModalVisible}
                 transparent
                 animationType="slide"
-                onRequestClose={() => setIsCategoryModalVisible(false)}
+                onRequestClose={closeCategoryModal}
             >
                 <View style={styles.modalOverlay}>
                     <View style={styles.modalContent}>
                         <View style={styles.modalHeader}>
                             <Text style={styles.modalTitle}>Select Your Skill</Text>
-                            <TouchableOpacity onPress={() => setIsCategoryModalVisible(false)}>
+                            <TouchableOpacity onPress={closeCategoryModal}>
                                 <Ionicons name="close" size={24} color="#333" />
                             </TouchableOpacity>
                         </View>
@@ -648,17 +670,14 @@ export default function VerificationDetailsScreen() {
                                 data={categories}
                                 keyExtractor={(item) => item._id}
                                 renderItem={({ item }) => {
-                                    const isSelected = selectedCategoryIds.includes(item._id);
-                                    const isAnyOtherSelected = selectedCategoryIds.length > 0 && !isSelected;
+                                    const isSelected = pendingCategoryId === item._id;
                                     return (
                                         <TouchableOpacity
                                             style={[
                                                 styles.categoryItem, 
-                                                isSelected && styles.categoryItemSelected,
-                                                isAnyOtherSelected && { opacity: 0.5 }
+                                                isSelected && styles.categoryItemSelected
                                             ]}
-                                            onPress={() => toggleCategory(item._id)}
-                                            disabled={isAnyOtherSelected}
+                                            onPress={() => setPendingCategoryId(item._id)}
                                         >
                                             <View style={[styles.categoryIconBox, isSelected && styles.categoryIconBoxSelected]}>
                                                 {item.icon && (item.icon.includes('/') || item.icon.includes('\\')) ? (
@@ -687,6 +706,17 @@ export default function VerificationDetailsScreen() {
                                 contentContainerStyle={{ paddingBottom: 20 }}
                             />
                         )}
+
+                        <TouchableOpacity
+                            style={[
+                                styles.modalDoneButton,
+                                !pendingCategoryId && styles.modalDoneButtonDisabled,
+                            ]}
+                            onPress={confirmCategorySelection}
+                            disabled={!pendingCategoryId}
+                        >
+                            <Text style={styles.modalDoneButtonText}>Select</Text>
+                        </TouchableOpacity>
                     </View>
                 </View>
             </Modal>
@@ -840,6 +870,9 @@ const styles = StyleSheet.create({
         paddingVertical: 15,
         borderRadius: 12,
         alignItems: 'center',
+    },
+    modalDoneButtonDisabled: {
+        backgroundColor: '#9CA3AF',
     },
     modalDoneButtonText: {
         color: '#FFF',

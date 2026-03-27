@@ -14,6 +14,7 @@ import Colors from '../../../constants/Colors';
 import { useTheme } from '../../../context/ThemeContext';
 
 const { width } = Dimensions.get('window');
+const FUTURE_SLIDE_WIDTH = width - 30;
 
 interface BackendCategory {
   _id: string;
@@ -22,11 +23,19 @@ interface BackendCategory {
   subcategories: any[];
 }
 
+const COORDINATE_TEXT_REGEX = /^\s*-?\d+(?:\.\d+)?\s*,\s*-?\d+(?:\.\d+)?\s*$/;
+
 const AD_IMAGES = [
   { id: '1', image: require('../../../assets/images/advertisement/Gemini_Generated_Image_1zajeb1zajeb1zaj.png') },
   { id: '2', image: require('../../../assets/images/advertisement/Gemini_Generated_Image_2pg7m12pg7m12pg7.png') },
   { id: '3', image: require('../../../assets/images/advertisement/Gemini_Generated_Image_3fy37q3fy37q3fy3.png') },
   { id: '4', image: require('../../../assets/images/advertisement/Gemini_Generated_Image_2pg7m12pg7m12pg7.png') },
+];
+
+const FUTURE_IMAGES = [
+  { id: '1', image: require('../../../assets/images/future/beauty.png') },
+  { id: '2', image: require('../../../assets/images/future/CarService.png') },
+  { id: '3', image: require('../../../assets/images/future/tailoring.png') },
 ];
 
 export default function HomeScreen() {
@@ -38,8 +47,10 @@ export default function HomeScreen() {
   const [searchLoading, setSearchLoading] = useState(false);
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [activeAdIndex, setActiveAdIndex] = useState(0);
+  const [activeFutureIndex, setActiveFutureIndex] = useState(0);
 
   const flatListRef = useRef<FlatList>(null);
+  const futureFlatListRef = useRef<FlatList>(null);
 
   const [categories, setCategories] = useState<BackendCategory[]>([]);
   const [loading, setLoading] = useState(true);
@@ -57,6 +68,27 @@ export default function HomeScreen() {
   const locationSearchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const locationAbortRef = useRef<AbortController | null>(null);
 
+  const buildReadableAddress = useCallback((addr: Location.LocationGeocodedAddress | null) => {
+    if (!addr) return '';
+    const parts = [
+      addr.name,
+      addr.street,
+      addr.subregion,
+      addr.city,
+      addr.region,
+    ].filter(Boolean);
+    return parts.join(', ');
+  }, []);
+
+  const reverseGeocodeToReadableAddress = useCallback(async (latitude: number, longitude: number) => {
+    try {
+      const result = await Location.reverseGeocodeAsync({ latitude, longitude });
+      return buildReadableAddress(result?.[0] ?? null);
+    } catch {
+      return '';
+    }
+  }, [buildReadableAddress]);
+
 
 
   useEffect(() => {
@@ -70,12 +102,26 @@ export default function HomeScreen() {
         if (saved) {
           const loc = JSON.parse(saved);
           setSelectedLocation({ latitude: loc.latitude, longitude: loc.longitude });
-          setAddress(loc.address || '');
+          const storedAddress = typeof loc.address === 'string' ? loc.address.trim() : '';
+          const hasReadableStoredAddress = storedAddress.length > 0 && !COORDINATE_TEXT_REGEX.test(storedAddress);
+
+          if (hasReadableStoredAddress) {
+            setAddress(storedAddress);
+          } else {
+            const readableAddress = await reverseGeocodeToReadableAddress(loc.latitude, loc.longitude);
+            const finalAddress = readableAddress || 'Selected location';
+            setAddress(finalAddress);
+            await AsyncStorage.setItem('customerLocation', JSON.stringify({
+              latitude: loc.latitude,
+              longitude: loc.longitude,
+              address: finalAddress,
+            }));
+          }
         }
       } catch { }
     };
     loadSaved();
-  }, []);
+  }, [reverseGeocodeToReadableAddress]);
 
   const fetchCategories = async () => {
     try {
@@ -131,10 +177,31 @@ export default function HomeScreen() {
     return () => clearInterval(interval);
   }, [activeAdIndex]);
 
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setActiveFutureIndex((prev) => {
+        const nextIndex = (prev + 1) % FUTURE_IMAGES.length;
+        futureFlatListRef.current?.scrollToIndex({
+          index: nextIndex,
+          animated: true,
+        });
+        return nextIndex;
+      });
+    }, 4000);
+
+    return () => clearInterval(interval);
+  }, []);
+
   const onAdScroll = (event: any) => {
     const slideSize = event.nativeEvent.layoutMeasurement.width;
     const index = event.nativeEvent.contentOffset.x / slideSize;
     setActiveAdIndex(Math.round(index));
+  };
+
+  const onFutureScroll = (event: any) => {
+    const slideSize = event.nativeEvent.layoutMeasurement.width;
+    const index = event.nativeEvent.contentOffset.x / slideSize;
+    setActiveFutureIndex(Math.round(index));
   };
 
   const renderItem = ({ item }: { item: BackendCategory }) => (
@@ -304,6 +371,49 @@ export default function HomeScreen() {
               <View style={styles.placeholderCard} />
               <View style={styles.placeholderCard} />
             </View>
+
+            <View style={styles.sectionHeader}>
+              <Text style={[styles.sectionTitle, { color: colors.tint }]}>Coming Soon</Text>
+            </View>
+            <View style={styles.adSection}>
+              <FlatList
+                ref={futureFlatListRef}
+                data={FUTURE_IMAGES}
+                horizontal
+                pagingEnabled
+                showsHorizontalScrollIndicator={false}
+                keyExtractor={(item) => item.id}
+                onScroll={onFutureScroll}
+                scrollEventThrottle={16}
+                getItemLayout={(_, index) => ({
+                  length: FUTURE_SLIDE_WIDTH,
+                  offset: FUTURE_SLIDE_WIDTH * index,
+                  index,
+                })}
+                onScrollToIndexFailed={(info) => {
+                  futureFlatListRef.current?.scrollToOffset({
+                    offset: FUTURE_SLIDE_WIDTH * info.index,
+                    animated: true,
+                  });
+                }}
+                renderItem={({ item }) => (
+                  <View style={styles.adSlide}>
+                    <Image source={item.image} style={styles.adImage} />
+                  </View>
+                )}
+              />
+              <View style={styles.pagination}>
+                {FUTURE_IMAGES.map((_, index) => (
+                  <View
+                    key={index}
+                    style={[
+                      styles.paginationDot,
+                      activeFutureIndex === index && styles.paginationDotActive,
+                    ]}
+                  />
+                ))}
+              </View>
+            </View>
           </>
         }
       />
@@ -464,15 +574,10 @@ export default function HomeScreen() {
                 setLocationLoading(true);
                 setLocationError(null);
                 try {
-                  let displayAddress = address;
-                  try {
-                    const result = await Location.reverseGeocodeAsync(selectedLocation);
-                    if (result.length > 0) {
-                      const addr = result[0];
-                      const parts = [addr.street, addr.district, addr.city, addr.region].filter(Boolean);
-                      displayAddress = parts.join(', ') || displayAddress;
-                    }
-                  } catch { }
+                  const displayAddress = (await reverseGeocodeToReadableAddress(
+                    selectedLocation.latitude,
+                    selectedLocation.longitude
+                  )) || 'Selected location';
 
                   const token = await AsyncStorage.getItem('userToken');
                   if (token) {
@@ -486,7 +591,7 @@ export default function HomeScreen() {
                       })
                     });
                   }
-                  setAddress(displayAddress || `${selectedLocation.latitude.toFixed(5)}, ${selectedLocation.longitude.toFixed(5)}`);
+                  setAddress(displayAddress);
                   await AsyncStorage.setItem('customerLocation', JSON.stringify({
                     latitude: selectedLocation.latitude,
                     longitude: selectedLocation.longitude,
@@ -824,7 +929,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 15,
     gap: 15,
     marginTop: 10,
-    marginBottom: 100,
+    marginBottom: 18,
   },
   placeholderCard: {
     flex: 1,

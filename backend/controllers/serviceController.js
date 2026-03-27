@@ -183,7 +183,7 @@ module.exports = {
         _id: { $in: laborerIds },
         role: "laborer",
       }).select(
-        "name profileImage rating experience currentLocation isAvailable lastActive status completedJobs",
+        "name profileImage rating experience currentLocation isAvailable lastActive status accountStatus completedJobs",
       );
       const userMap = new Map(users.map((u) => [u._id.toString(), u]));
 
@@ -246,6 +246,7 @@ module.exports = {
                   currentLocation: u.currentLocation || null,
                   online,
                   status: u.status,
+                  accountStatus: u.accountStatus,
                   completedJobs:
                     completedJobsMap.get(o.laborer.toString()) || 0,
                 }
@@ -257,6 +258,14 @@ module.exports = {
           if (!includeUnapproved || includeUnapproved === "false") {
             if (!item.profile || item.profile.status !== "approved")
               return false;
+          }
+          if (
+            item.profile &&
+            (item.profile.status === "blocked" ||
+              item.profile.accountStatus === "temp_blocked" ||
+              item.profile.accountStatus === "perm_blocked")
+          ) {
+            return false;
           }
           if (onlineOnly === "true") {
             if (!item.profile || !item.profile.online) return false;

@@ -32,6 +32,7 @@ export const fetchSubcategories = async (categoryId: string) => {
 export const createCategory = async (formData: FormData) => {
   const response = await fetch(`${API_URL}/categories`, {
     method: "POST",
+    headers: getAuthHeaders(),
     body: formData,
   });
   if (!response.ok) {
@@ -44,6 +45,7 @@ export const createCategory = async (formData: FormData) => {
 export const updateCategory = async (id: string, formData: FormData) => {
   const response = await fetch(`${API_URL}/categories/${id}`, {
     method: "PUT",
+    headers: getAuthHeaders(),
     body: formData,
   });
   if (!response.ok) {
@@ -56,6 +58,7 @@ export const updateCategory = async (id: string, formData: FormData) => {
 export const deleteCategory = async (id: string) => {
   const response = await fetch(`${API_URL}/categories/${id}`, {
     method: "DELETE",
+    headers: getAuthHeaders(),
   });
   if (!response.ok) throw new Error("Failed to delete category");
   return response.json();
@@ -64,6 +67,7 @@ export const deleteCategory = async (id: string) => {
 export const createSubcategory = async (formData: FormData) => {
   const response = await fetch(`${API_URL}/subcategories`, {
     method: "POST",
+    headers: getAuthHeaders(),
     body: formData,
   });
   if (!response.ok) {
@@ -76,6 +80,7 @@ export const createSubcategory = async (formData: FormData) => {
 export const updateSubcategory = async (id: string, formData: FormData) => {
   const response = await fetch(`${API_URL}/subcategories/${id}`, {
     method: "PUT",
+    headers: getAuthHeaders(),
     body: formData,
   });
   if (!response.ok) {
@@ -88,6 +93,7 @@ export const updateSubcategory = async (id: string, formData: FormData) => {
 export const deleteSubcategory = async (id: string) => {
   const response = await fetch(`${API_URL}/subcategories/${id}`, {
     method: "DELETE",
+    headers: getAuthHeaders(),
   });
   if (!response.ok) throw new Error("Failed to delete subcategory");
   return response.json();

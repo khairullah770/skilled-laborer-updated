@@ -115,6 +115,18 @@ const createBooking = async (req, res) => {
     if (!laborer || laborer.role !== "laborer") {
       return res.status(404).json({ message: "Laborer not found" });
     }
+    const laborerBlocked =
+      laborer.status === "blocked" ||
+      laborer.accountStatus === "temp_blocked" ||
+      laborer.accountStatus === "perm_blocked";
+    if (laborerBlocked) {
+      await session.abortTransaction().catch(() => {});
+      session.endSession();
+      return res.status(403).json({
+        message: "This laborer account is blocked and cannot accept bookings.",
+        code: "LABORER_BLOCKED",
+      });
+    }
 
     // Prevent duplicate active bookings for the same customer + laborer
     const existingActive = await Booking.findOne({

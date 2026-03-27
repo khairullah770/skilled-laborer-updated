@@ -8,7 +8,7 @@ import { API_URL } from '../../constants/Api';
 
 interface BackendCategory {
     _id: string;
-    name: string;
+    name: unknown;
     icon: string;
 }
 
@@ -25,12 +25,19 @@ export default function AllCategoriesScreen() {
         try {
             const response = await fetch(`${API_URL}/api/categories`);
             const data = await response.json();
-            setCategories(data);
+            setCategories(Array.isArray(data) ? data : []);
         } catch (error) {
             console.error('Error fetching categories:', error);
         } finally {
             setLoading(false);
         }
+    };
+
+    const getCategoryTitle = (value: unknown) => {
+        if (typeof value === 'string' || typeof value === 'number') {
+            return String(value);
+        }
+        return 'Category';
     };
 
     const getImageUrl = (path: string) => {
@@ -41,7 +48,7 @@ export default function AllCategoriesScreen() {
 
     const renderItem = ({ item }: { item: BackendCategory }) => (
         <ServiceCard
-            title={item.name}
+            title={getCategoryTitle(item.name)}
             imageUrl={getImageUrl(item.icon)}
             onPress={() => router.push({ pathname: '/category/[id]', params: { id: item._id } })}
         />
@@ -71,7 +78,7 @@ export default function AllCategoriesScreen() {
                     <Ionicons name="arrow-back" size={24} color="#1F41BB" />
                 </TouchableOpacity>
                 <Text style={styles.title}>All Categories</Text>
-                <View style={{ width: 40 }} /> {/* Spacing balance */}
+                <View style={{ width: 40 }} />
             </View>
 
             <FlatList
