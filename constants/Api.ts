@@ -1,4 +1,30 @@
-export const API_URL = "http://10.141.10.99:5000";
+import Constants from "expo-constants";
+import { Platform } from "react-native";
+
+const stripTrailingSlash = (value: string) => value.replace(/\/+$/, "");
+
+const getExpoHost = (): string | null => {
+  const hostUri =
+    (Constants as any)?.expoConfig?.hostUri ||
+    (Constants as any)?.manifest2?.extra?.expoGo?.debuggerHost ||
+    (Constants as any)?.manifest?.debuggerHost;
+
+  if (!hostUri || typeof hostUri !== "string") return null;
+  return hostUri.split(":")[0] || null;
+};
+
+const resolveApiUrl = (): string => {
+  const envApiUrl = process.env.EXPO_PUBLIC_API_URL?.trim();
+  if (envApiUrl) return stripTrailingSlash(envApiUrl);
+
+  const expoHost = getExpoHost();
+  if (expoHost) return `http://${expoHost}:5000`;
+
+  if (Platform.OS === "android") return "http://10.0.2.2:5000";
+  return "http://localhost:5000";
+};
+
+export const API_URL = resolveApiUrl();
 
 export interface ApiFetchOptions {
   method?: string;

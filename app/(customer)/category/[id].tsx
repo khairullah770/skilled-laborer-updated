@@ -11,6 +11,8 @@ interface BackendSubcategory {
     _id: string;
     name: string;
     description?: string;
+    icon?: string;
+    picture?: string;
 }
 
 interface BackendCategory {
@@ -54,6 +56,18 @@ export default function CategoryDetailsScreen() {
         if (!path) return undefined;
         const normalizedPath = path.replace(/\\/g, '/');
         return `${API_URL}/${normalizedPath}`;
+    };
+
+    const getSubcategoryIconName = (name: string): keyof typeof Ionicons.glyphMap => {
+        const normalized = name.toLowerCase();
+        if (normalized.includes('door') || normalized.includes('window')) return 'home-outline';
+        if (normalized.includes('drawer') || normalized.includes('cabinet')) return 'file-tray-outline';
+        if (normalized.includes('sofa') || normalized.includes('polish') || normalized.includes('furniture')) return 'construct-outline';
+        if (normalized.includes('repair') || normalized.includes('install')) return 'hammer-outline';
+        if (normalized.includes('paint')) return 'color-fill-outline';
+        if (normalized.includes('electric')) return 'flash-outline';
+        if (normalized.includes('plumb') || normalized.includes('pipe')) return 'water-outline';
+        return 'layers-outline';
     };
 
     if (loading) {
@@ -100,7 +114,20 @@ export default function CategoryDetailsScreen() {
                 params: { id: item._id, title: item.name, customerLat, customerLng }
             });
         }}>
-            <Text style={styles.itemText}>{item.name}</Text>
+            <View style={styles.itemLeftSection}>
+                <View style={styles.subcategoryIconBox}>
+                    {item.picture || item.icon ? (
+                        <Image
+                            source={{ uri: getImageUrl(item.picture || item.icon || '') }}
+                            style={styles.subcategoryIconImage}
+                            resizeMode="contain"
+                        />
+                    ) : (
+                        <Ionicons name={getSubcategoryIconName(item.name)} size={18} color="#1F41BB" />
+                    )}
+                </View>
+                <Text style={styles.itemText}>{item.name}</Text>
+            </View>
             <Ionicons name="chevron-forward" size={24} color="#000" />
         </TouchableOpacity>
     );
@@ -181,13 +208,34 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'space-between',
-        paddingVertical: 20,
+        paddingVertical: 16,
         paddingHorizontal: 20,
         backgroundColor: '#fff',
     },
+    itemLeftSection: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        flex: 1,
+        marginRight: 12,
+    },
+    subcategoryIconBox: {
+        width: 34,
+        height: 34,
+        borderRadius: 17,
+        backgroundColor: '#EEF2FF',
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginRight: 12,
+    },
+    subcategoryIconImage: {
+        width: 20,
+        height: 20,
+    },
     itemText: {
-        fontSize: 16,
+        fontSize: 14,
+        lineHeight: 20,
         color: '#555',
+        flexShrink: 1,
     },
     separator: {
         height: 1,

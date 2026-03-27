@@ -42,7 +42,7 @@ const userSchema = mongoose.Schema(
     ],
     status: {
       type: String,
-      enum: ["unverified", "pending", "approved", "rejected"],
+      enum: ["unverified", "pending", "approved", "rejected", "blocked"],
       default: "unverified", // Default status for laborers
     },
     accountStatus: {
@@ -62,6 +62,10 @@ const userSchema = mongoose.Schema(
     blockInfo: {
       type: { type: String, enum: ["temporary", "permanent"] },
       reason: { type: String },
+      previousStatus: {
+        type: String,
+        enum: ["unverified", "pending", "approved", "rejected", "blocked"],
+      },
       blockedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
       blockedAt: { type: Date },
       unblockedAt: { type: Date },

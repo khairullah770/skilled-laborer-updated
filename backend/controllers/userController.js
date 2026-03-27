@@ -122,6 +122,20 @@ const loginUser = async (req, res) => {
     }
 
     if (user && (await bcrypt.compare(password, user.password))) {
+      const isBlockedLaborer =
+        user.role === "laborer" &&
+        (user.status === "blocked" ||
+          user.accountStatus === "temp_blocked" ||
+          user.accountStatus === "perm_blocked");
+
+      if (isBlockedLaborer) {
+        return res.status(403).json({
+          message: "Your account is blocked. Please contact support.",
+          code: "ACCOUNT_BLOCKED",
+          accountStatus: user.accountStatus,
+        });
+      }
+
       res.json({
         _id: user.id,
         name: user.name,
@@ -652,13 +666,16 @@ const getPublicLaborerProfile = async (req, res) => {
   try {
     const user = await User.findById(req.params.id)
       .select(
-        "name profileImage rating experience status currentLocation isAvailable lastActive phone completedJobs verificationHistory role",
+        "name profileImage rating experience status accountStatus currentLocation isAvailable lastActive phone completedJobs verificationHistory role",
       )
       .lean();
     const allowUnapproved = req.query.includeUnapproved === "true";
     if (
       !user ||
       user.role !== "laborer" ||
+      user.status === "blocked" ||
+      user.accountStatus === "temp_blocked" ||
+      user.accountStatus === "perm_blocked" ||
       (!allowUnapproved && user.status !== "approved")
     ) {
       return res.status(404).json({ message: "Laborer not found" });
@@ -778,6 +795,8 @@ const laborerAccountAction = async (req, res) => {
     let notifTitle = "";
     let notifMessage = "";
 
+    const previousStatusBeforeAction = user.status;
+
     switch (action) {
       case "warning":
         user.accountStatus = "warned";
@@ -795,9 +814,14 @@ const laborerAccountAction = async (req, res) => {
       case "temp_block":
         user.accountStatus = "temp_blocked";
         user.isAvailable = false;
+        user.status = "blocked";
         user.blockInfo = {
           type: "temporary",
           reason,
+          previousStatus:
+            previousStatusBeforeAction === "blocked"
+              ? "approved"
+              : previousStatusBeforeAction,
           blockedBy: req.user._id,
           blockedAt: new Date(),
           ratingAtTime: currentRating,
@@ -811,9 +835,14 @@ const laborerAccountAction = async (req, res) => {
       case "perm_block":
         user.accountStatus = "perm_blocked";
         user.isAvailable = false;
+        user.status = "blocked";
         user.blockInfo = {
           type: "permanent",
           reason,
+          previousStatus:
+            previousStatusBeforeAction === "blocked"
+              ? "approved"
+              : previousStatusBeforeAction,
           blockedBy: req.user._id,
           blockedAt: new Date(),
           ratingAtTime: currentRating,
@@ -827,6 +856,7 @@ const laborerAccountAction = async (req, res) => {
       case "unblock":
         user.accountStatus = "active";
         user.isAvailable = true;
+        user.status = user.blockInfo?.previousStatus || "approved";
         if (user.blockInfo) {
           user.blockInfo.unblockedAt = new Date();
         }

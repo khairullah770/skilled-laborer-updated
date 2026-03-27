@@ -14,6 +14,12 @@ export default function AccountScreen() {
     const colors = Colors[colorScheme];
     const [customer, setCustomer] = useState<any>(null);
 
+    const formatEmailForDisplay = (email?: string | null) => {
+        const value = (email || '').trim();
+        if (!value) return '';
+        return value.toLowerCase().endsWith('@gmail') ? `${value}.com` : value;
+    };
+
     useFocusEffect(
         useCallback(() => {
             const fetchCustomer = async () => {
@@ -99,7 +105,9 @@ export default function AccountScreen() {
                     </View>
                     <Text style={styles.userName}>{customer?.name || 'Your Name'}</Text>
                     {customer?.email ? (
-                        <Text style={styles.userEmail}>{customer.email}</Text>
+                        <Text style={styles.userEmail}>
+                            {formatEmailForDisplay(customer.email)}
+                        </Text>
                     ) : customer?.phone ? (
                         <Text style={styles.userEmail}>{customer.phone}</Text>
                     ) : null}
@@ -181,7 +189,7 @@ const styles = StyleSheet.create({
         borderColor: '#FFFFFF',
     },
     userName: {
-        fontSize: 22,
+        fontSize: 14,
         fontWeight: 'bold',
         color: '#FFFFFF',
         marginBottom: 4,
@@ -189,6 +197,8 @@ const styles = StyleSheet.create({
     userEmail: {
         fontSize: 14,
         color: '#C7D2FE',
+        textAlign: 'center',
+        maxWidth: '90%',
     },
     menuContainer: {
         backgroundColor: '#FFFFFF',

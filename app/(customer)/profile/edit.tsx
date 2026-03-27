@@ -20,6 +20,12 @@ export default function ProfileEditScreen() {
     const [confirmPassword, setConfirmPassword] = useState('');
     const [changing, setChanging] = useState(false);
 
+    const formatEmailForDisplay = (email?: string | null) => {
+        const value = (email || '').trim();
+        if (!value) return '';
+        return value.toLowerCase().endsWith('@gmail') ? `${value}.com` : value;
+    };
+
     useEffect(() => {
         const load = async () => {
             const t = await AsyncStorage.getItem('userToken');
@@ -124,17 +130,15 @@ export default function ProfileEditScreen() {
                 behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
                 style={{ flex: 1 }}
             >
-                {/* Header */}
                 <View style={styles.header}>
                     <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
                         <Ionicons name="arrow-back" size={24} color="#1F41BB" />
                     </TouchableOpacity>
                     <Text style={styles.headerTitle}>Edit Profile</Text>
-                    <View style={{ width: 40 }} /> {/* Spacer */}
+                    <View style={{ width: 40 }} />
                 </View>
 
                 <ScrollView contentContainerStyle={styles.scrollContent}>
-                    {/* Profile Picture Section */}
                     <View style={styles.avatarSection}>
                         <View style={styles.avatarContainer}>
                             <Image
@@ -149,11 +153,10 @@ export default function ProfileEditScreen() {
                         <Button text={uploading ? 'Uploading...' : 'Update Profile Picture'} onPress={uploadProfileImage} disabled={uploading || !avatarUri} />
                     </View>
 
-                    {/* Form Section */}
                     <View style={styles.formSection}>
-                        <Input label="Full Name" value={customer?.name || ''} editable={false} />
-                        <Input label="Email Address" value={customer?.email || ''} editable={false} />
-                        <Input label="Phone Number" value={customer?.phone || ''} editable={false} />
+                        <Input label="Full Name" value={String(customer?.name || '')} editable={false} />
+                        <Input label="Email Address" value={formatEmailForDisplay(customer?.email)} editable={false} />
+                        <Input label="Phone Number" value={String(customer?.phone || '')} editable={false} />
 
                         <View style={{ height: 20 }} />
                         <Text style={{ fontSize: 16, fontWeight: '700', marginBottom: 8, color: '#030f39ff' }}>Change Password</Text>

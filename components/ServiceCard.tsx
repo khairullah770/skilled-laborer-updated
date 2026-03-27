@@ -3,7 +3,7 @@ import React from 'react';
 import { Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 interface ServiceCardProps {
-    title: string;
+    title: string | number;
     iconName?: keyof typeof Ionicons.glyphMap; // Using Ionicons for now
     imageUrl?: string; // For remote images
     imageSource?: any; // For local require() images
@@ -11,6 +11,8 @@ interface ServiceCardProps {
 }
 
 const ServiceCard: React.FC<ServiceCardProps> = ({ title, iconName, imageUrl, imageSource, onPress }) => {
+    const safeTitle = typeof title === 'string' || typeof title === 'number' ? String(title) : 'Service';
+
     return (
         <TouchableOpacity style={styles.card} onPress={onPress} activeOpacity={0.7}>
             <View style={styles.iconContainer}>
@@ -30,7 +32,7 @@ const ServiceCard: React.FC<ServiceCardProps> = ({ title, iconName, imageUrl, im
                 adjustsFontSizeToFit
                 minimumFontScale={0.8}
             >
-                {title}
+                {safeTitle}
             </Text>
         </TouchableOpacity>
     );
