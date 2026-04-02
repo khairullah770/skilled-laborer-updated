@@ -179,7 +179,7 @@ export default function BookingScreen() {
         if (text.length > 2) {
             searchTimeout.current = setTimeout(() => {
                 fetchSuggestions(text);
-            }, 500);
+            }, 500) as unknown as NodeJS.Timeout;
         } else {
             setSuggestions([]);
         }

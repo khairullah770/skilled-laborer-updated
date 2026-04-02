@@ -31,6 +31,47 @@ interface ChatBotProps {
   customerLocation?: { latitude: number; longitude: number; address?: string };
 }
 
+const getChatbotApiBases = () => {
+  const clean = API_URL.replace(/\/+$/, '');
+  const bases = [clean];
+  const match = clean.match(/^(https?:\/\/[^:]+:)(\d+)$/i);
+
+  if (match) {
+    const hostPrefix = match[1];
+    const currentPort = Number(match[2]);
+
+    // Backend may auto-move to 5001/5002 if 5000 is occupied.
+    if (currentPort === 5000) {
+      bases.push(`${hostPrefix}5001`, `${hostPrefix}5002`);
+    }
+  }
+
+  return [...new Set(bases)];
+};
+
+const chatbotRequest = async (path: string, init?: RequestInit): Promise<Response> => {
+  const bases = getChatbotApiBases();
+  let lastError: unknown = null;
+
+  for (const base of bases) {
+    try {
+      const response = await fetch(`${base}${path}`, init);
+
+      // If endpoint is missing or server errored, try next candidate backend port.
+      if (response.status === 404 || response.status >= 500) {
+        lastError = new Error(`Chatbot request failed on ${base} (${response.status})`);
+        continue;
+      }
+
+      return response;
+    } catch (err) {
+      lastError = err;
+    }
+  }
+
+  throw lastError || new Error('Unable to reach chatbot service');
+};
+
 export default function ChatBot({ visible, onClose, customerLocation }: ChatBotProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
@@ -87,7 +128,7 @@ export default function ChatBot({ visible, onClose, customerLocation }: ChatBotP
     try {
       const token = await getToken();
       if (!token) return;
-      const res = await fetch(`${API_URL}/api/chatbot/history`, {
+      const res = await chatbotRequest(`/api/chatbot/history`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (res.ok) {
@@ -122,7 +163,7 @@ export default function ChatBot({ visible, onClose, customerLocation }: ChatBotP
     try {
       const token = await getToken();
       if (!token) return;
-      const res = await fetch(`${API_URL}/api/chatbot/suggestions`, {
+      const res = await chatbotRequest(`/api/chatbot/suggestions`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (res.ok) {
@@ -150,12 +191,16 @@ export default function ChatBot({ visible, onClose, customerLocation }: ChatBotP
         const token = await getToken();
         if (!token) throw new Error('No token');
 
-        const res = await fetch(`${API_URL}/api/chatbot/message`, {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 12000);
+
+        const res = await chatbotRequest(`/api/chatbot/message`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${token}`,
           },
+          signal: controller.signal,
           body: JSON.stringify({
             message: msg,
             context: customerLocation
@@ -164,17 +209,28 @@ export default function ChatBot({ visible, onClose, customerLocation }: ChatBotP
           }),
         });
 
-        if (!res.ok) throw new Error('API error');
+        clearTimeout(timeout);
+
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.message || 'API error');
+        }
         const data = await res.json();
 
         const botMsg: Message = { role: 'assistant', content: data.reply };
         setMessages((prev) => [...prev, botMsg]);
       } catch (e) {
+        const msg = e instanceof Error ? e.message : 'Please try again.';
+        const friendly = /not authorized|token/i.test(msg)
+          ? 'Your session expired. Please log in again to use the assistant.'
+          : /unable to reach chatbot service|network|failed|api error|abort|timeout/i.test(msg)
+            ? 'I cannot reach the assistant server right now. Please check your connection and try again.'
+            : 'Sorry, I had trouble processing that. Please try again.';
         setMessages((prev) => [
           ...prev,
           {
             role: 'assistant',
-            content: 'Sorry, I had trouble processing that. Please try again.',
+            content: friendly,
           },
         ]);
       } finally {
@@ -189,7 +245,7 @@ export default function ChatBot({ visible, onClose, customerLocation }: ChatBotP
     try {
       const token = await getToken();
       if (token) {
-        await fetch(`${API_URL}/api/chatbot/history`, {
+        await chatbotRequest(`/api/chatbot/history`, {
           method: 'DELETE',
           headers: { Authorization: `Bearer ${token}` },
         });

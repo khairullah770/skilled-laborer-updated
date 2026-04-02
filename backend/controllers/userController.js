@@ -609,6 +609,28 @@ const updateAvailability = async (req, res) => {
       return res.status(404).json({ message: "User not found" });
     }
 
+    if (isAvailable === true) {
+      const lat = Number(user.currentLocation?.latitude);
+      const lng = Number(user.currentLocation?.longitude);
+      const address = (user.currentLocation?.address || "").trim();
+
+      const hasValidLocation =
+        Number.isFinite(lat) &&
+        Number.isFinite(lng) &&
+        lat >= -90 &&
+        lat <= 90 &&
+        lng >= -180 &&
+        lng <= 180 &&
+        address.length > 0;
+
+      if (!hasValidLocation) {
+        return res.status(400).json({
+          message:
+            "Current location is required before going online. Please set your location first.",
+        });
+      }
+    }
+
     user.isAvailable = isAvailable;
     const updatedUser = await user.save();
 

@@ -25,11 +25,17 @@ export default function BookingsScreen() {
         if (s === 'accepted') {
             return 'Accepted';
         }
+        if (s === 'on the way') {
+            return 'On the Way';
+        }
+        if (s === 'arrived') {
+            return 'Arrived';
+        }
         if (s === 'in progress') {
-            return 'Job in progress';
+            return 'In Progress';
         }
         if (s === 'completed') {
-            return 'Job completed';
+            return 'Completed';
         }
         if (s === 'cancelled') {
             return 'Cancelled';

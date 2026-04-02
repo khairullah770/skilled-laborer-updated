@@ -42,6 +42,8 @@ const bookingSchema = mongoose.Schema(
       enum: [
         "Pending",
         "Accepted",
+        "On the Way",
+        "Arrived",
         "Declined",
         "In Progress",
         "Completed",
@@ -51,6 +53,12 @@ const bookingSchema = mongoose.Schema(
       default: "Pending",
     },
     acceptedAt: {
+      type: Date,
+    },
+    onTheWayAt: {
+      type: Date,
+    },
+    arrivedAt: {
       type: Date,
     },
     cancelledAt: {

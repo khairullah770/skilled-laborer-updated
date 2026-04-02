@@ -3,13 +3,14 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect, useRouter } from 'expo-router';
 import React, { useCallback, useState } from 'react';
 import {
-  ActivityIndicator,
-  RefreshControl,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View
+    ActivityIndicator,
+    Alert,
+    RefreshControl,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { API_URL } from '../../../constants/Api';
@@ -20,6 +21,22 @@ export default function HomeScreen() {
   const router = useRouter();
   const { colorScheme } = useTheme();
   const colors = Colors[colorScheme];
+
+  const hasValidCurrentLocation = (candidate: any) => {
+    const lat = Number(candidate?.currentLocation?.latitude);
+    const lng = Number(candidate?.currentLocation?.longitude);
+    const address = (candidate?.currentLocation?.address ?? '').toString().trim();
+
+    return (
+      Number.isFinite(lat) &&
+      Number.isFinite(lng) &&
+      lat >= -90 &&
+      lat <= 90 &&
+      lng >= -180 &&
+      lng <= 180 &&
+      address.length > 0
+    );
+  };
   
   const computeDisplayName = (u: any) => {
     try {
@@ -109,8 +126,24 @@ export default function HomeScreen() {
   }, []);
 
   const toggleAvailability = async () => {
+    const newStatus = !isAvailable;
+
+    if (newStatus && !hasValidCurrentLocation(user)) {
+      Alert.alert(
+        'Location required',
+        'Add your current location before going online so customers can find you.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Add Location',
+            onPress: () => router.push('/(laborer)/location/edit'),
+          },
+        ],
+      );
+      return;
+    }
+
     try {
-      const newStatus = !isAvailable;
       setIsAvailable(newStatus);
 
       const userToken = await AsyncStorage.getItem('userToken');
@@ -125,7 +158,8 @@ export default function HomeScreen() {
         });
 
         if (!response.ok) {
-          throw new Error('Failed to update availability');
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error(errorData.message || 'Failed to update availability');
         }
 
         // Update local user state as well
@@ -137,8 +171,9 @@ export default function HomeScreen() {
       }
     } catch (error) {
       console.error('Error toggling availability:', error);
+      Alert.alert('Unable to update availability', (error as Error)?.message || 'Please try again.');
       // Revert local state if API fails
-      setIsAvailable(isAvailable);
+      setIsAvailable((prev) => !prev);
     }
   };
 

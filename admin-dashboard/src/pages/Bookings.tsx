@@ -1,4 +1,4 @@
-import { AlertCircle, Briefcase, Calendar, CheckCircle, Clock, CreditCard, DollarSign, MapPin, Search, XCircle } from 'lucide-react';
+import { AlertCircle, Briefcase, Calendar, CheckCircle, Clock, CreditCard, DollarSign, MapPin, Navigation, Search, XCircle } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { fetchBookings } from '../api';
 import Modal from '../components/Modal';
@@ -23,7 +23,7 @@ interface Booking {
   } | null;
   service: string;
   serviceDescription?: string;
-  status: 'Pending' | 'Accepted' | 'In Progress' | 'Completed' | 'Cancelled' | 'Declined' | 'Rescheduled';
+  status: 'Pending' | 'Accepted' | 'On the Way' | 'Arrived' | 'In Progress' | 'Completed' | 'Cancelled' | 'Declined' | 'Rescheduled';
   scheduledAt: string;
   date: string;
   location?: { address: string; latitude?: number; longitude?: number };
@@ -32,6 +32,8 @@ interface Booking {
   price: number;
   estimatedDurationMin?: number;
   paymentStatus?: 'Pending' | 'Paid';
+  onTheWayAt?: string;
+  arrivedAt?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -94,14 +96,18 @@ const Bookings = () => {
     const completed = bookings.filter(b => b.status === 'Completed');
     const totalEarnings = completed.reduce((sum, b) => sum + (b.compensation || b.price || 0), 0);
     const pending = bookings.filter(b => b.status === 'Pending').length;
+    const onTheWay = bookings.filter(b => b.status === 'On the Way').length;
+    const arrived = bookings.filter(b => b.status === 'Arrived').length;
     const inProgress = bookings.filter(b => b.status === 'In Progress').length;
     const cancelled = bookings.filter(b => b.status === 'Cancelled').length;
-    return { totalEarnings, completedCount: completed.length, pending, inProgress, cancelled, total: bookings.length };
+    return { totalEarnings, completedCount: completed.length, pending, onTheWay, arrived, inProgress, cancelled, total: bookings.length };
   }, [bookings]);
 
   const tabs = [
     { label: 'All', count: stats.total },
     { label: 'Pending', count: stats.pending },
+    { label: 'On the Way', count: stats.onTheWay },
+    { label: 'Arrived', count: stats.arrived },
     { label: 'In Progress', count: stats.inProgress },
     { label: 'Completed', count: stats.completedCount },
     { label: 'Cancelled', count: stats.cancelled },
@@ -111,6 +117,10 @@ const Bookings = () => {
     switch (status) {
       case 'Completed': 
         return <span className="flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800"><CheckCircle className="w-3 h-3 mr-1" /> Completed</span>;
+      case 'On the Way':
+        return <span className="flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-cyan-100 text-cyan-800"><Navigation className="w-3 h-3 mr-1" /> On the Way</span>;
+      case 'Arrived':
+        return <span className="flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-violet-100 text-violet-800"><MapPin className="w-3 h-3 mr-1" /> Arrived</span>;
       case 'In Progress': 
         return <span className="flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800"><Clock className="w-3 h-3 mr-1" /> In Progress</span>;
       case 'Cancelled': 
@@ -439,10 +449,22 @@ const Bookings = () => {
                 </div>
               </div>
 
-              {/* Created / Updated */}
-              <div className="flex items-center justify-between text-xs text-slate-400 pt-2">
-                <span>Created: {new Date(selectedBooking.createdAt).toLocaleString()}</span>
-                <span>Updated: {new Date(selectedBooking.updatedAt).toLocaleString()}</span>
+              {/* Created / Updated / Arrived */}
+              <div className="space-y-1 text-xs text-slate-400 pt-2">
+                <div className="flex items-center justify-between">
+                  <span>Created: {new Date(selectedBooking.createdAt).toLocaleString()}</span>
+                  <span>Updated: {new Date(selectedBooking.updatedAt).toLocaleString()}</span>
+                </div>
+                {selectedBooking.arrivedAt && (
+                  <div className="flex items-center justify-between mt-1">
+                    <span className="text-violet-600 font-medium">Arrived at: {new Date(selectedBooking.arrivedAt).toLocaleString()}</span>
+                  </div>
+                )}
+                {selectedBooking.onTheWayAt && (
+                  <div className="flex items-center justify-between mt-1">
+                    <span className="text-cyan-600 font-medium">On the Way since: {new Date(selectedBooking.onTheWayAt).toLocaleString()}</span>
+                  </div>
+                )}
               </div>
             </div>
           </div>

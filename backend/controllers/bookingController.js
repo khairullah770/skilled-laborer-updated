@@ -4,9 +4,182 @@ const User = require("../models/User");
 const Chat = require("../models/Chat");
 const Notification = require("../models/Notification");
 const ServiceOffering = require("../models/ServiceOffering");
+const Subcategory = require("../models/Subcategory");
 const JobRating = require("../models/JobRating");
 const { calculateNewAverage } = require("../utils/ratingUtils");
 const { sendPushNotification } = require("../utils/notificationService");
+
+const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
+const PICKUP_AI_MODEL =
+  process.env.OPENROUTER_PICKUP_MODEL ||
+  "meta-llama/llama-3.2-3b-instruct:free";
+
+const tokenize = (value = "") =>
+  value
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .split(/\s+/)
+    .filter((t) => t && t.length > 2);
+
+const escapeRegex = (value = "") =>
+  value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+const resolveSubcategoryContext = async (booking) => {
+  const serviceName = (booking.service || "").trim();
+  const desc = booking.serviceDescription || "";
+
+  if (!serviceName) return null;
+
+  const exact = await Subcategory.findOne({
+    name: { $regex: new RegExp(`^${escapeRegex(serviceName)}$`, "i") },
+  })
+    .populate("category", "name")
+    .lean();
+
+  if (exact) {
+    return {
+      subcategoryId: exact._id,
+      subcategoryName: exact.name,
+      subcategoryDescription: exact.description || "",
+      categoryName: exact.category?.name || "General",
+      minPrice: exact.minPrice,
+      maxPrice: exact.maxPrice,
+      matchType: "exact",
+    };
+  }
+
+  const tokens = tokenize(`${serviceName} ${desc}`);
+  const candidates = await Subcategory.find()
+    .populate("category", "name")
+    .select("name description minPrice maxPrice category")
+    .lean();
+
+  let best = null;
+  let bestScore = 0;
+  for (const c of candidates) {
+    const hay = `${c.name || ""} ${c.description || ""}`.toLowerCase();
+    const score = tokens.reduce(
+      (acc, tk) => acc + (hay.includes(tk) ? 1 : 0),
+      0,
+    );
+    if (score > bestScore) {
+      bestScore = score;
+      best = c;
+    }
+  }
+
+  if (!best || bestScore === 0) return null;
+  return {
+    subcategoryId: best._id,
+    subcategoryName: best.name,
+    subcategoryDescription: best.description || "",
+    categoryName: best.category?.name || "General",
+    minPrice: best.minPrice,
+    maxPrice: best.maxPrice,
+    matchType: "fuzzy",
+  };
+};
+
+const buildDbFallbackRecommendation = (context, booking) => {
+  const subcategory =
+    context?.subcategoryName || booking?.service || "selected service";
+  const category = context?.categoryName || "General";
+  return {
+    spareParts: [
+      `${subcategory} compatible replacement parts`,
+      `${subcategory} fitting/consumable kit`,
+      "Extra fasteners, sealants and connectors",
+    ],
+    requiredTools: [
+      `${category} standard toolkit`,
+      "Primary diagnostic tool for this subcategory",
+      "Adjustment and installation toolset",
+    ],
+    optionalSafetyItems: [
+      "Work gloves",
+      "Protective eyewear",
+      "Task-specific safety mask",
+    ],
+  };
+};
+
+const parsePickupJson = (content) => {
+  if (!content || typeof content !== "string") return null;
+  const cleaned = content.replace(/```json|```/gi, "").trim();
+  const start = cleaned.indexOf("{");
+  const end = cleaned.lastIndexOf("}");
+  if (start < 0 || end < 0 || end <= start) return null;
+
+  try {
+    const parsed = JSON.parse(cleaned.slice(start, end + 1));
+    if (
+      !Array.isArray(parsed?.spareParts) ||
+      !Array.isArray(parsed?.requiredTools) ||
+      !Array.isArray(parsed?.optionalSafetyItems)
+    ) {
+      return null;
+    }
+    return {
+      spareParts: parsed.spareParts.map((v) => String(v)).slice(0, 10),
+      requiredTools: parsed.requiredTools.map((v) => String(v)).slice(0, 10),
+      optionalSafetyItems: parsed.optionalSafetyItems
+        .map((v) => String(v))
+        .slice(0, 10),
+    };
+  } catch {
+    return null;
+  }
+};
+
+const fetchAiPickupRecommendation = async (booking, subcategoryContext) => {
+  const apiKey = process.env.OPENROUTER_API_KEY;
+  if (!apiKey) {
+    throw new Error("OPENROUTER_API_KEY is not configured");
+  }
+
+  const systemPrompt =
+    "You are a field operations assistant for skilled laborers. Return only strict JSON with keys spareParts, requiredTools, optionalSafetyItems. Each key must have an array of concise strings directly relevant to the provided category and subcategory from database. Avoid generic placeholders and unrelated items.";
+  const userPrompt = [
+    `Category: ${subcategoryContext?.categoryName || "General"}`,
+    `Selected subcategory (DB): ${subcategoryContext?.subcategoryName || booking.service}`,
+    `Subcategory description (DB): ${subcategoryContext?.subcategoryDescription || "N/A"}`,
+    `Price range (DB): ${subcategoryContext?.minPrice ?? "N/A"} - ${subcategoryContext?.maxPrice ?? "N/A"}`,
+    `Booking notes: ${booking.serviceDescription || "N/A"}`,
+    "Generate practical pickup recommendations before leaving for this job.",
+  ].join("\n");
+
+  const res = await fetch(OPENROUTER_URL, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${apiKey}`,
+      "HTTP-Referer": "http://localhost:5000",
+      "X-Title": "Skilled Labor App",
+    },
+    body: JSON.stringify({
+      model: PICKUP_AI_MODEL,
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt },
+      ],
+      temperature: 0.2,
+      max_tokens: 350,
+    }),
+  });
+
+  if (!res.ok) {
+    const errText = await res.text();
+    throw new Error(`OpenRouter error ${res.status}: ${errText}`);
+  }
+
+  const data = await res.json();
+  const content = data?.choices?.[0]?.message?.content || "";
+  const parsed = parsePickupJson(content);
+  if (!parsed) {
+    throw new Error("AI response format invalid for pickup recommendation");
+  }
+  return parsed;
+};
 
 // @desc    Get all bookings
 // @route   GET /api/bookings
@@ -132,7 +305,9 @@ const createBooking = async (req, res) => {
     const existingActive = await Booking.findOne({
       customer: customerId,
       laborer: laborerId,
-      status: { $in: ["Pending", "Accepted", "In Progress"] },
+      status: {
+        $in: ["Pending", "Accepted", "On the Way", "Arrived", "In Progress"],
+      },
     }).session(session);
 
     if (existingActive) {
@@ -262,6 +437,8 @@ const getMyBookings = async (req, res) => {
       return (
         classifyPending(status) ||
         s === "accepted" ||
+        s === "on the way" ||
+        s === "arrived" ||
         s === "in progress" ||
         s === "rescheduled"
       );
@@ -293,7 +470,14 @@ const getMyJobs = async (req, res) => {
       .populate("customer", "name profileImage phone email")
       .sort({ scheduledAt: 1 });
     const upcoming = items.filter((b) =>
-      ["Pending", "Accepted", "In Progress", "Rescheduled"].includes(b.status),
+      [
+        "Pending",
+        "Accepted",
+        "On the Way",
+        "Arrived",
+        "In Progress",
+        "Rescheduled",
+      ].includes(b.status),
     );
     const completed = items.filter((b) => b.status === "Completed");
     res.json({ upcoming, completed });
@@ -311,10 +495,12 @@ const acceptBooking = async (req, res) => {
     if (!booking) return res.status(404).json({ message: "Booking not found" });
     if (booking.laborer.toString() !== req.user._id.toString())
       return res.status(403).json({ message: "Not authorized" });
-    if (booking.status !== "Pending") {
+    if (booking.status !== "Pending" && booking.status !== "Rescheduled") {
       return res
         .status(400)
-        .json({ message: "Only pending bookings can be accepted" });
+        .json({
+          message: "Only pending or rescheduled bookings can be accepted",
+        });
     }
     booking.status = "Accepted";
     booking.acceptedAt = new Date();
@@ -408,6 +594,118 @@ const declineBooking = async (req, res) => {
   }
 };
 
+// @desc    Laborer goes on the way (mark On the Way)
+// @route   PUT /api/bookings/:id/go
+// @access  Private (Laborer)
+const goOnTheWay = async (req, res) => {
+  try {
+    const booking = await Booking.findById(req.params.id);
+    if (!booking) return res.status(404).json({ message: "Booking not found" });
+    if (booking.laborer.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ message: "Not authorized" });
+    }
+    if (booking.status !== "Accepted") {
+      return res
+        .status(400)
+        .json({ message: "Only accepted bookings can be set to on the way" });
+    }
+    booking.status = "On the Way";
+    booking.onTheWayAt = new Date();
+    booking.log.push({
+      action: "on_the_way",
+      by: req.user._id,
+      meta: { at: booking.onTheWayAt },
+    });
+    await booking.save();
+    const laborerName = req.user.name || "your laborer";
+    await Notification.create({
+      recipient: booking.customer,
+      type: "job_request",
+      title: "Laborer On the Way",
+      message: "Your laborer is on the way.",
+      data: {
+        bookingId: booking._id,
+        status: booking.status,
+        laborerName,
+        onTheWayAt: booking.onTheWayAt,
+        service: booking.service,
+        scheduledAt: booking.scheduledAt,
+        address: booking.location?.address,
+        compensation: booking.compensation,
+      },
+    });
+    try {
+      await sendPushNotification(
+        booking.customer,
+        "Laborer On the Way",
+        "Your laborer is on the way.",
+      );
+    } catch (pushErr) {
+      console.error("Push notification failed for go on the way:", pushErr);
+    }
+    await booking.populate("customer", "name profileImage phone email");
+    res.json(booking);
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
+};
+
+// @desc    Laborer arrived at location
+// @route   PUT /api/bookings/:id/arrived
+// @access  Private (Laborer)
+const arrivedAtLocation = async (req, res) => {
+  try {
+    const booking = await Booking.findById(req.params.id);
+    if (!booking) return res.status(404).json({ message: "Booking not found" });
+    if (booking.laborer.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ message: "Not authorized" });
+    }
+    if (booking.status !== "On the Way") {
+      return res
+        .status(400)
+        .json({ message: "Only on-the-way bookings can be marked as arrived" });
+    }
+    booking.status = "Arrived";
+    booking.arrivedAt = new Date();
+    booking.log.push({
+      action: "arrived",
+      by: req.user._id,
+      meta: { at: booking.arrivedAt },
+    });
+    await booking.save();
+    const laborerName = req.user.name || "your laborer";
+    await Notification.create({
+      recipient: booking.customer,
+      type: "job_request",
+      title: "Laborer Has Arrived",
+      message: "Laborer has arrived.",
+      data: {
+        bookingId: booking._id,
+        status: booking.status,
+        laborerName,
+        arrivedAt: booking.arrivedAt,
+        service: booking.service,
+        scheduledAt: booking.scheduledAt,
+        address: booking.location?.address,
+        compensation: booking.compensation,
+      },
+    });
+    try {
+      await sendPushNotification(
+        booking.customer,
+        "Laborer Has Arrived",
+        "Laborer has arrived.",
+      );
+    } catch (pushErr) {
+      console.error("Push notification failed for arrived:", pushErr);
+    }
+    await booking.populate("customer", "name profileImage phone email");
+    res.json(booking);
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
+};
+
 // @desc    Laborer starts job (mark In Progress)
 // @route   PUT /api/bookings/:id/start
 // @access  Private (Laborer)
@@ -418,10 +716,10 @@ const startBooking = async (req, res) => {
     if (booking.laborer.toString() !== req.user._id.toString()) {
       return res.status(403).json({ message: "Not authorized" });
     }
-    if (booking.status !== "Accepted") {
+    if (booking.status !== "Arrived") {
       return res
         .status(400)
-        .json({ message: "Only accepted bookings can be started" });
+        .json({ message: "Only arrived bookings can be started" });
     }
     booking.status = "In Progress";
     booking.startedAt = new Date();
@@ -480,8 +778,13 @@ const completeBooking = async (req, res) => {
         .json({ message: "Only in-progress bookings can be completed" });
     }
     booking.status = "Completed";
+    booking.completedAt = new Date();
     booking.paymentStatus = "Paid";
-    booking.log.push({ action: "completed", by: req.user._id });
+    booking.log.push({
+      action: "completed",
+      by: req.user._id,
+      meta: { at: booking.completedAt },
+    });
     await booking.save();
 
     // Deactivate the chat for this booking
@@ -500,7 +803,7 @@ const completeBooking = async (req, res) => {
       recipient: booking.customer,
       type: "job_request",
       title: "Job Completed",
-      message: `Your job has been completed by ${laborerName}`,
+      message: "Your service has been completed successfully.",
       data: {
         bookingId: booking._id,
         status: booking.status,
@@ -515,7 +818,7 @@ const completeBooking = async (req, res) => {
       await sendPushNotification(
         booking.customer,
         "Job Completed",
-        `Your job has been completed by ${laborerName}`,
+        "Your service has been completed successfully.",
       );
     } catch (pushErr) {
       console.error("Push notification failed for booking complete:", pushErr);
@@ -898,7 +1201,9 @@ const checkAcceptedBooking = async (req, res) => {
     const booking = await Booking.findOne({
       customer: customerId,
       laborer: req.params.laborerId,
-      status: { $in: ["Accepted", "In Progress", "Completed"] },
+      status: {
+        $in: ["Accepted", "On the Way", "Arrived", "In Progress", "Completed"],
+      },
     })
       .select("_id status")
       .sort({ updatedAt: -1 })
@@ -948,6 +1253,58 @@ const uploadBookingPhotos = async (req, res) => {
   }
 };
 
+// @desc    Get AI pickup recommendations for a laborer's accepted booking
+// @route   GET /api/bookings/:id/pickup-recommendations
+// @access  Private (Laborer)
+const getPickupRecommendations = async (req, res) => {
+  try {
+    const booking = await Booking.findById(req.params.id);
+    if (!booking) return res.status(404).json({ message: "Booking not found" });
+
+    if (!req.user || booking.laborer.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ message: "Not authorized" });
+    }
+
+    const subcategoryContext = await resolveSubcategoryContext(booking);
+
+    let recommendation;
+    let source = "ai-db";
+
+    try {
+      recommendation = await fetchAiPickupRecommendation(
+        booking,
+        subcategoryContext,
+      );
+    } catch (aiErr) {
+      source = "fallback-db";
+      console.error("Pickup recommendation AI error:", aiErr.message || aiErr);
+      recommendation = buildDbFallbackRecommendation(
+        subcategoryContext,
+        booking,
+      );
+    }
+
+    return res.json({
+      source,
+      bookingId: booking._id,
+      service: booking.service,
+      matchedSubcategory: subcategoryContext
+        ? {
+            id: subcategoryContext.subcategoryId,
+            name: subcategoryContext.subcategoryName,
+            category: subcategoryContext.categoryName,
+            matchType: subcategoryContext.matchType,
+          }
+        : null,
+      ...recommendation,
+    });
+  } catch (err) {
+    return res
+      .status(500)
+      .json({ message: err.message || "Failed to get pickup recommendations" });
+  }
+};
+
 module.exports = {
   getBookings,
   updateBookingStatus,
@@ -956,6 +1313,8 @@ module.exports = {
   getMyJobs,
   acceptBooking,
   declineBooking,
+  goOnTheWay,
+  arrivedAtLocation,
   startBooking,
   completeBooking,
   rateBooking,
@@ -964,4 +1323,5 @@ module.exports = {
   getBookingById,
   checkAcceptedBooking,
   uploadBookingPhotos,
+  getPickupRecommendations,
 };

@@ -133,13 +133,18 @@ export default function BookingDetailsScreen() {
 
     const statusNorm = (booking?.status || '').toString().toLowerCase();
     const isAccepted = statusNorm === 'accepted';
+    const isOnTheWay = statusNorm === 'on the way';
+    const isArrived = statusNorm === 'arrived';
     const isInProgress = statusNorm === 'in progress';
     const isCompleted = statusNorm === 'completed';
     const hasExistingRating = !!booking?.myRating;
+    const isActive = isAccepted || isOnTheWay || isArrived || isInProgress;
 
     const steps = [
         { title: 'Booking Accepted', key: 'Accepted' },
-        { title: 'Booking In progress', key: 'In Progress' },
+        { title: 'Laborer On the Way', key: 'On the Way' },
+        { title: 'Laborer Arrived', key: 'Arrived' },
+        { title: 'Booking In Progress', key: 'In Progress' },
         { title: 'Booking Completed', key: 'Completed' }
     ];
 
@@ -240,7 +245,7 @@ export default function BookingDetailsScreen() {
                             <Text style={[styles.rateText, { color: '#1F41BB' }]}>{`Rs ${booking.compensation}`}</Text>
                         </View>
                         <View style={styles.actionIcons}>
-                            {(isAccepted || isInProgress) ? (
+                            {isActive ? (
                                 <>
                                     <TouchableOpacity
                                         style={[styles.iconCircle, { backgroundColor: '#EBF0FF' }]}
@@ -271,13 +276,25 @@ export default function BookingDetailsScreen() {
                         <View style={styles.acceptedBadgeContainer}>
                             <Text style={styles.acceptedBadgeText}>Booking Accepted</Text>
                         </View>
+                    ) : isOnTheWay ? (
+                        <View style={[styles.acceptedBadgeContainer, { backgroundColor: '#DBEAFE' }]}>
+                            <Ionicons name="car-outline" size={18} color="#1E40AF" style={{ marginRight: 6 }} />
+                            <Text style={[styles.acceptedBadgeText, { color: '#1E40AF' }]}>Laborer On the Way</Text>
+                        </View>
+                    ) : isArrived ? (
+                        <View style={[styles.acceptedBadgeContainer, { backgroundColor: '#EDE9FE' }]}>
+                            <Ionicons name="location-outline" size={18} color="#7C3AED" style={{ marginRight: 6 }} />
+                            <Text style={[styles.acceptedBadgeText, { color: '#7C3AED' }]}>Laborer Has Arrived</Text>
+                        </View>
                     ) : isInProgress ? (
-                        <View style={[styles.acceptedBadgeContainer, { backgroundColor: '#FFFFFF' }]}>
-                            <Text style={[styles.acceptedBadgeText, { color: '#164EA3' }]}>In Progress</Text>
+                        <View style={[styles.acceptedBadgeContainer, { backgroundColor: '#FEF3C7' }]}>
+                            <Ionicons name="hammer-outline" size={18} color="#D97706" style={{ marginRight: 6 }} />
+                            <Text style={[styles.acceptedBadgeText, { color: '#D97706' }]}>Job In Progress</Text>
                         </View>
                     ) : isCompleted ? (
-                        <View style={styles.acceptedBadgeContainer}>
-                            <Text style={styles.acceptedBadgeText}>Booking Completed</Text>
+                        <View style={[styles.acceptedBadgeContainer, { backgroundColor: '#D1FAE5' }]}>
+                            <Ionicons name="checkmark-circle-outline" size={18} color="#059669" style={{ marginRight: 6 }} />
+                            <Text style={[styles.acceptedBadgeText, { color: '#059669' }]}>Booking Completed</Text>
                         </View>
                     ) : (
                         <View style={styles.buttonRow}>
@@ -450,17 +467,38 @@ export default function BookingDetailsScreen() {
                         <Text style={[styles.statusTitle, { color: colors.text }]}>Booking Status</Text>
                         <View style={styles.timelineContainer}>
                             {steps.map((s, index) => {
-                                const completed = ['Accepted', 'In Progress', 'Completed'].indexOf(booking.status) >= index;
+                                const statusOrder = ['Accepted', 'On the Way', 'Arrived', 'In Progress', 'Completed'];
+                                const currentIdx = statusOrder.indexOf(booking.status);
+                                const completed = currentIdx >= 0 && index <= currentIdx;
+                                const isCurrentStep = index === currentIdx;
+                                const isCompletedCurrentStep = s.key === 'Completed' && isCurrentStep;
                                 return (
                                     <View key={s.key} style={styles.timelineItem}>
                                         <View style={styles.timelineLeading}>
-                                            <View style={[styles.timelineDot, { backgroundColor: completed ? '#1F41BB' : '#D1D5DB' }]} />
+                                            <View style={[
+                                                styles.timelineDot,
+                                                isCompletedCurrentStep && styles.timelineCompletedTick,
+                                                { backgroundColor: completed ? '#1F41BB' : '#D1D5DB' },
+                                                isCurrentStep && !isCompletedCurrentStep && { borderWidth: 2, borderColor: '#1F41BB', backgroundColor: '#DBEAFE' }
+                                            ]}>
+                                                {isCompletedCurrentStep && (
+                                                    <Ionicons name="checkmark" size={12} color="#FFFFFF" />
+                                                )}
+                                            </View>
                                             {index !== steps.length - 1 && (
-                                                <View style={[styles.timelineLine, { backgroundColor: '#D1D5DB' }]} />
+                                                <View style={[
+                                                    styles.timelineLine,
+                                                    { backgroundColor: completed && index < currentIdx ? '#1F41BB' : '#D1D5DB' }
+                                                ]} />
                                             )}
                                         </View>
                                         <View style={styles.timelineContent}>
-                                            <Text style={[styles.statusItemText, { color: completed ? colors.text : (colorScheme === 'dark' ? '#9CA3AF' : '#757575') }, completed && { fontWeight: '600' }]}>{s.title}</Text>
+                                            <Text style={[
+                                                styles.statusItemText,
+                                                { color: completed ? colors.text : (colorScheme === 'dark' ? '#9CA3AF' : '#757575') },
+                                                completed && { fontWeight: '600' },
+                                                isCurrentStep && { fontWeight: '700', color: '#1F41BB' }
+                                            ]}>{s.title}</Text>
                                         </View>
                                     </View>
                                 );
@@ -576,6 +614,7 @@ const styles = StyleSheet.create({
     acceptedBadgeContainer: {
         justifyContent: 'center',
         alignItems: 'center',
+        flexDirection: 'row',
         marginBottom: 40,
     },
     acceptedBadgeText: {
@@ -586,6 +625,7 @@ const styles = StyleSheet.create({
         color: '#1F41BB',
         fontSize: 16,
         fontWeight: 'bold',
+        overflow: 'hidden',
     },
     buttonRow: {
         flexDirection: 'row',
@@ -704,6 +744,13 @@ const styles = StyleSheet.create({
         height: 14,
         borderRadius: 7,
         zIndex: 1,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    timelineCompletedTick: {
+        width: 20,
+        height: 20,
+        borderRadius: 10,
     },
     timelineLine: {
         width: 2,

@@ -172,12 +172,49 @@ io.on("connection", (socket) => {
   });
 });
 
-const PORT = process.env.PORT || 5000;
+const DEFAULT_PORT = 5000;
+const MAX_PORT_RETRIES = 10;
+const PORT = Number(process.env.PORT) || DEFAULT_PORT;
+
+const startServerWithPortRetry = (startPort) =>
+  new Promise((resolve, reject) => {
+    let retries = 0;
+
+    const tryListen = (port) => {
+      const onError = (err) => {
+        server.off("listening", onListening);
+
+        if (err && err.code === "EADDRINUSE" && retries < MAX_PORT_RETRIES) {
+          retries += 1;
+          const nextPort = port + 1;
+          console.warn(
+            `Port ${port} is in use. Retrying on port ${nextPort}...`,
+          );
+          setTimeout(() => tryListen(nextPort), 100);
+          return;
+        }
+
+        reject(err);
+      };
+
+      const onListening = () => {
+        server.off("error", onError);
+        resolve(port);
+      };
+
+      server.once("error", onError);
+      server.once("listening", onListening);
+      server.listen(port);
+    };
+
+    tryListen(startPort);
+  });
 
 if (require.main === module) {
   connectDB()
-    .then(() => {
-      server.listen(PORT, () => console.log(`Server started on port ${PORT}`));
+    .then(async () => {
+      const activePort = await startServerWithPortRetry(PORT);
+      console.log(`Server started on port ${activePort}`);
     })
     .catch((err) => {
       console.error(

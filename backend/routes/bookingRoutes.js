@@ -8,6 +8,8 @@ const {
   getMyJobs,
   acceptBooking,
   declineBooking,
+  goOnTheWay,
+  arrivedAtLocation,
   startBooking,
   completeBooking,
   rateBooking,
@@ -16,6 +18,7 @@ const {
   getBookingById,
   checkAcceptedBooking,
   uploadBookingPhotos,
+  getPickupRecommendations,
 } = require("../controllers/bookingController");
 const { protect, admin } = require("../middleware/authMiddleware");
 const upload = require("../middleware/upload");
@@ -38,8 +41,11 @@ router.post(
 
 // Laborer
 router.get("/laborer", protect, getMyJobs);
+router.get("/:id/pickup-recommendations", protect, getPickupRecommendations);
 router.put("/:id/accept", protect, acceptBooking);
 router.put("/:id/decline", protect, declineBooking);
+router.put("/:id/go", protect, goOnTheWay);
+router.put("/:id/arrived", protect, arrivedAtLocation);
 router.put("/:id/start", protect, startBooking);
 router.put("/:id/complete", protect, completeBooking);
 

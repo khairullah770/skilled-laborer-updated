@@ -12,21 +12,21 @@ const User = require("../models/User");
  * ───────────────────────────────────────────────────────── */
 const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
 
-// Less popular free models first (less congested), then popular ones as fallback
+// Keep model list short for faster failover.
 const OPENROUTER_MODELS = [
-  "nvidia/nemotron-nano-9b-v2:free",
   "stepfun/step-3.5-flash:free",
-  "liquid/lfm-2.5-1.2b-instruct:free",
-  "arcee-ai/trinity-mini:free",
-  "mistralai/mistral-small-3.1-24b-instruct:free",
-  "qwen/qwen3-4b:free",
   "meta-llama/llama-3.2-3b-instruct:free",
-  "google/gemma-3-4b-it:free",
+  "mistralai/mistral-small-3.1-24b-instruct:free",
 ];
 
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const CATALOG_CACHE_TTL_MS = 2 * 60 * 1000;
+let serviceCatalogCache = {
+  expiresAt: 0,
+  categoryInfo: "",
+  serviceIndex: [],
+};
 
-async function callGemini(systemPrompt, conversationHistory, retries = 3) {
+async function callGemini(systemPrompt, conversationHistory, retries = 1) {
   const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey) {
     throw new Error("OPENROUTER_API_KEY is not configured");
@@ -64,6 +64,8 @@ async function callGemini(systemPrompt, conversationHistory, retries = 3) {
 
     for (let attempt = 0; attempt < retries; attempt++) {
       try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 8000);
         const res = await fetch(OPENROUTER_URL, {
           method: "POST",
           headers: {
@@ -72,8 +74,10 @@ async function callGemini(systemPrompt, conversationHistory, retries = 3) {
             "HTTP-Referer": "http://localhost:5000",
             "X-Title": "Skilled Labor App",
           },
+          signal: controller.signal,
           body: JSON.stringify(body),
         });
+        clearTimeout(timeout);
 
         if (res.ok) {
           const data = await res.json();
@@ -85,11 +89,7 @@ async function callGemini(systemPrompt, conversationHistory, retries = 3) {
         }
 
         if (res.status === 429) {
-          const waitTime = 5000 + attempt * 5000; // 5s, 10s, 15s
-          console.warn(
-            `${model} rate limited (attempt ${attempt + 1}/${retries}), waiting ${waitTime}ms...`,
-          );
-          await sleep(waitTime);
+          console.warn(`${model} rate limited, trying next model...`);
           continue;
         }
 
@@ -121,6 +121,12 @@ async function callGemini(systemPrompt, conversationHistory, retries = 3) {
         console.error(`OpenRouter error (${model}):`, res.status, errData);
         break;
       } catch (fetchErr) {
+        if (fetchErr?.name === "AbortError") {
+          console.warn(
+            `OpenRouter timeout (${model}), trying next attempt/model...`,
+          );
+          continue;
+        }
         console.error(`Fetch error (${model}):`, fetchErr.message);
         break;
       }
@@ -132,45 +138,234 @@ async function callGemini(systemPrompt, conversationHistory, retries = 3) {
   );
 }
 
+const normalizeText = (value = "") =>
+  value
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+const hasAnyPhrase = (query, phrases = []) =>
+  phrases.some((phrase) => query.includes(normalizeText(phrase)));
+
+const buildGenericAppSupportReply = () =>
+  "I can help with app-related support: booking steps, booking status, pricing ranges, payment status, laborer availability, location updates, and in-app chat. Ask me a specific question like 'How do I cancel a booking?' or 'What is my latest booking status?' for an exact answer.";
+
+const isAppSupportQuestion = (query) => {
+  const appKeywords = [
+    "book",
+    "booking",
+    "status",
+    "price",
+    "cost",
+    "payment",
+    "paid",
+    "cancel",
+    "reschedule",
+    "laborer",
+    "service",
+    "category",
+    "availability",
+    "online",
+    "offline",
+    "location",
+    "chat",
+    "message",
+    "account",
+    "profile",
+    "verification",
+    "support",
+    "app",
+  ];
+  return appKeywords.some((keyword) => query.includes(keyword));
+};
+
+async function getServiceCatalogContext() {
+  const now = Date.now();
+  if (serviceCatalogCache.expiresAt > now) {
+    return serviceCatalogCache;
+  }
+
+  const categories = await Category.find().select("name").lean();
+  const subcategories = await Subcategory.find()
+    .select("name minPrice maxPrice category")
+    .lean();
+
+  const categoryMap = new Map();
+  for (const cat of categories) {
+    categoryMap.set(String(cat._id), {
+      name: cat.name,
+      services: [],
+    });
+  }
+
+  const serviceIndex = [];
+  for (const sub of subcategories) {
+    const categoryId = String(sub.category || "");
+    const bucket = categoryMap.get(categoryId);
+    const priceLabel =
+      Number.isFinite(sub.minPrice) && Number.isFinite(sub.maxPrice)
+        ? `Rs ${sub.minPrice}-${sub.maxPrice}`
+        : "Price on request";
+
+    if (bucket) {
+      bucket.services.push(`${sub.name} (${priceLabel})`);
+    }
+
+    serviceIndex.push({
+      name: sub.name,
+      normalizedName: normalizeText(sub.name),
+      minPrice: sub.minPrice,
+      maxPrice: sub.maxPrice,
+      categoryName: bucket?.name || "General",
+    });
+  }
+
+  const lines = [...categoryMap.values()].map(
+    (c) => `• ${c.name}: ${c.services.join(", ") || "No services listed"}`,
+  );
+
+  serviceCatalogCache = {
+    expiresAt: now + CATALOG_CACHE_TTL_MS,
+    categoryInfo:
+      lines.join("\n") || "Service information is temporarily unavailable.",
+    serviceIndex,
+  };
+
+  return serviceCatalogCache;
+}
+
+async function buildInstantReply(userMessage, customerId) {
+  const query = normalizeText(userMessage);
+  const { categoryInfo, serviceIndex } = await getServiceCatalogContext();
+
+  const asksServices = hasAnyPhrase(query, [
+    "what services",
+    "services do you offer",
+    "which services",
+    "service list",
+    "what can i book",
+  ]);
+
+  if (asksServices) {
+    return `We currently offer these service groups:\n${categoryInfo}\n\nYou can open any category on the home screen to see available laborers and exact pricing ranges.`;
+  }
+
+  const asksBookingFlow = hasAnyPhrase(query, [
+    "how do i book",
+    "book a laborer",
+    "how to book",
+    "booking process",
+    "how can i place booking",
+  ]);
+
+  if (asksBookingFlow) {
+    return "To book a laborer: 1) Open Home, 2) Select category and subcategory, 3) Choose a laborer, 4) Pick date/time and confirm. You can also chat with the laborer before confirming.";
+  }
+
+  const asksStatus = hasAnyPhrase(query, [
+    "booking status",
+    "my booking",
+    "recent booking",
+    "latest booking",
+    "where is my booking",
+  ]);
+
+  if (asksStatus) {
+    const recentBookings = await Booking.find({ customer: customerId })
+      .sort({ createdAt: -1 })
+      .limit(3)
+      .lean();
+
+    if (!recentBookings.length) {
+      return "You don't have any recent bookings yet. Go to Home, choose a service, and create your first booking.";
+    }
+
+    const lines = recentBookings.map(
+      (b) => `- ${b.service}: ${b.status} (Rs ${b.compensation || "N/A"})`,
+    );
+    return `Here are your latest bookings:\n${lines.join("\n")}`;
+  }
+
+  const asksPrice =
+    query.includes("price") ||
+    query.includes("cost") ||
+    query.includes("charges");
+  if (asksPrice) {
+    const matched = serviceIndex.find((s) => query.includes(s.normalizedName));
+    if (
+      matched &&
+      Number.isFinite(matched.minPrice) &&
+      Number.isFinite(matched.maxPrice)
+    ) {
+      return `${matched.name} usually ranges around Rs ${matched.minPrice}-${matched.maxPrice} in ${matched.categoryName}. Actual cost may vary by job complexity and location.`;
+    }
+    return "Pricing depends on the selected subcategory and laborer. Open a service to view the current min/max price range before booking.";
+  }
+
+  const asksPayment = hasAnyPhrase(query, [
+    "payment",
+    "paid",
+    "bill",
+    "invoice",
+    "who confirms payment",
+  ]);
+  if (asksPayment) {
+    return "Payment updates after job completion. In this app flow, laborer confirmation and booking completion update payment state to customers/admin. You can check payment status in booking details.";
+  }
+
+  const asksAvailability = hasAnyPhrase(query, [
+    "availability",
+    "online",
+    "offline",
+    "go online",
+  ]);
+  if (asksAvailability) {
+    return "Laborers can only go Online after adding a valid current location (latitude, longitude, and address). Customers see laborers based on availability and location filters.";
+  }
+
+  const asksLocation = hasAnyPhrase(query, [
+    "set location",
+    "update location",
+    "current location",
+    "share location",
+  ]);
+  if (asksLocation) {
+    return "To update location: go to your home screen, open location edit, pin/search your place, and save. Accurate location helps with nearby laborer matching and job routing.";
+  }
+
+  const asksCancelOrReschedule = hasAnyPhrase(query, [
+    "cancel booking",
+    "reschedule",
+    "change booking time",
+  ]);
+  if (asksCancelOrReschedule) {
+    return "Open Bookings, select the target booking, and use available actions for cancel/reschedule based on current status. If action is unavailable, contact support from the app.";
+  }
+
+  if (isAppSupportQuestion(query)) {
+    return buildGenericAppSupportReply();
+  }
+
+  return null;
+}
+
 /* ─────────────────────────────────────────────────────────
  *  Build a system prompt that gives the AI full context
  * ───────────────────────────────────────────────────────── */
 async function buildSystemPrompt(customer, extraContext = {}) {
-  // Fetch all categories and subcategories for context
-  let categoryInfo = "";
+  let categoryInfo = "Service information is temporarily unavailable.";
   try {
-    const categories = await Category.find().lean();
-    const subcategories = await Subcategory.find()
-      .populate("category", "name")
-      .lean();
-
-    const catMap = {};
-    for (const cat of categories) {
-      catMap[cat._id.toString()] = { name: cat.name, services: [] };
-    }
-    for (const sub of subcategories) {
-      const catId = sub.category?._id?.toString() || sub.category?.toString();
-      if (catMap[catId]) {
-        catMap[catId].services.push(
-          `${sub.name} (Rs ${sub.minPrice}-${sub.maxPrice})`,
-        );
-      }
-    }
-
-    const lines = Object.values(catMap).map(
-      (c) => `• ${c.name}: ${c.services.join(", ") || "No services listed"}`,
-    );
-    categoryInfo = lines.join("\n");
-  } catch {
-    categoryInfo = "Service information is temporarily unavailable.";
-  }
+    const catalog = await getServiceCatalogContext();
+    categoryInfo = catalog.categoryInfo;
+  } catch {}
 
   // Fetch recent bookings for context
   let bookingInfo = "";
   try {
     const recentBookings = await Booking.find({ customer: customer._id })
       .sort({ createdAt: -1 })
-      .limit(5)
+      .limit(3)
       .populate("laborer", "name rating")
       .lean();
 
@@ -277,6 +472,30 @@ const sendMessage = async (req, res) => {
     // Keep only last 20 messages for context window
     const recentMessages = conversation.messages.slice(-20);
 
+    // Fast path for common app-specific questions.
+    let instantReply = null;
+    try {
+      instantReply = await buildInstantReply(userMessage, customer._id);
+    } catch (instantErr) {
+      console.error(
+        "Instant chatbot reply error:",
+        instantErr.message || instantErr,
+      );
+      instantReply = buildGenericAppSupportReply();
+    }
+    if (instantReply) {
+      conversation.messages.push({ role: "assistant", content: instantReply });
+      if (conversation.messages.length > 50) {
+        conversation.messages = conversation.messages.slice(-50);
+      }
+      await conversation.save();
+
+      return res.json({
+        reply: instantReply,
+        conversationId: conversation._id,
+      });
+    }
+
     // Build system prompt with full context
     const systemPrompt = await buildSystemPrompt(customer, {
       location: conversation.context.location,
@@ -286,15 +505,25 @@ const sendMessage = async (req, res) => {
     let aiReply;
     try {
       aiReply = await callGemini(systemPrompt, recentMessages);
+      if (!aiReply || !String(aiReply).trim()) {
+        aiReply = buildGenericAppSupportReply();
+      }
     } catch (aiError) {
       console.error("AI call failed:", aiError.message);
       if (aiError.message.includes("rate limit")) {
         aiReply =
           "I'm receiving a lot of requests right now. Please wait about 30 seconds and try again. In the meantime, you can browse services from the home screen! 🙂";
+      } else if (aiError.message.toLowerCase().includes("timeout")) {
+        aiReply =
+          "The assistant is taking too long right now. Please try again in a few seconds, or browse services directly while I reconnect.";
       } else {
         aiReply =
           "I'm having trouble connecting right now. Please try again in a moment, or browse our services directly from the home screen.";
       }
+    }
+
+    if (!aiReply || !String(aiReply).trim()) {
+      aiReply = buildGenericAppSupportReply();
     }
 
     // Add assistant reply
