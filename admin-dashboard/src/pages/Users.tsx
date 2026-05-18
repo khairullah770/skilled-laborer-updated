@@ -8,7 +8,7 @@ interface User {
   name: string;
   email: string;
   role: 'admin' | 'laborer' | 'customer';
-  status?: 'pending' | 'approved' | 'rejected' | 'unverified';
+  status?: 'pending' | 'approved' | 'rejected' | 'unverified' | 'blocked';
   category?: { _id: string; name: string } | string;
   categories?: { _id: string; name: string }[] | string[];
   phone?: string;
@@ -27,9 +27,9 @@ interface User {
     submittedData?: {
       name?: string;
       profileImage?: string;
-      [key: string]: any;
+      [key: string]: unknown;
     };
-    [key: string]: any;
+    [key: string]: unknown;
   }[];
 }
 
@@ -72,6 +72,71 @@ function getDisplayCategory(user: User): string {
   return 'General';
 }
 
+function getLaborerStatusBadge(user: User) {
+  // Account-level blocks must take precedence over verification status.
+  if (user.accountStatus === 'temp_blocked') {
+    return (
+      <span className="px-3 py-1 inline-flex items-center text-xs font-medium rounded-full bg-orange-100 text-orange-700">
+        <Lock className="w-3 h-3 mr-1" /> Temp Blocked
+      </span>
+    );
+  }
+
+  if (user.accountStatus === 'perm_blocked') {
+    return (
+      <span className="px-3 py-1 inline-flex items-center text-xs font-medium rounded-full bg-rose-100 text-rose-700">
+        <ShieldOff className="w-3 h-3 mr-1" /> Perm Blocked
+      </span>
+    );
+  }
+
+  if (user.accountStatus === 'warned') {
+    return (
+      <span className="px-3 py-1 inline-flex items-center text-xs font-medium rounded-full bg-amber-100 text-amber-700">
+        <AlertTriangle className="w-3 h-3 mr-1" /> Warned
+      </span>
+    );
+  }
+
+  if (user.status === 'blocked') {
+    return (
+      <span className="px-3 py-1 inline-flex items-center text-xs font-medium rounded-full bg-rose-100 text-rose-700">
+        <ShieldOff className="w-3 h-3 mr-1" /> Blocked
+      </span>
+    );
+  }
+
+  if (user.status === 'approved') {
+    return (
+      <span className="px-3 py-1 inline-flex items-center text-xs font-medium rounded-full bg-emerald-100 text-emerald-800">
+        <ShieldCheck className="w-3 h-3 mr-1" /> Verified
+      </span>
+    );
+  }
+
+  if (user.status === 'rejected') {
+    return (
+      <span className="px-3 py-1 inline-flex items-center text-xs font-medium rounded-full bg-rose-100 text-rose-800">
+        <XCircle className="w-3 h-3 mr-1" /> Rejected
+      </span>
+    );
+  }
+
+  if (user.status === 'unverified') {
+    return (
+      <span className="px-3 py-1 inline-flex items-center text-xs font-medium rounded-full bg-slate-100 text-slate-600">
+        <ShieldAlert className="w-3 h-3 mr-1" /> Unverified
+      </span>
+    );
+  }
+
+  return (
+    <span className="px-3 py-1 inline-flex items-center text-xs font-medium rounded-full bg-amber-100 text-amber-800">
+      <Clock className="w-3 h-3 mr-1" /> Pending
+    </span>
+  );
+}
+
 const Users = () => {
   const [activeTab, setActiveTab] = useState<'laborers' | 'customers'>('laborers');
   const [laborers, setLaborers] = useState<User[]>([]);
@@ -93,9 +158,10 @@ const Users = () => {
       setCustomers(customersData);
       console.log('Laborers:', laborersData);
       console.log('Customers:', customersData);
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       console.error('Error loading users:', error);
-      alert(`Error loading users: ${error?.message || 'Unknown error'}`);
+      alert(`Error loading users: ${errorMessage}`);
     } finally {
       setLoading(false);
     }
@@ -378,34 +444,7 @@ const Users = () => {
                           </span>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
-                          {user.status === 'approved' ? (
-                            <span className="px-3 py-1 inline-flex items-center text-xs font-medium rounded-full bg-emerald-100 text-emerald-800">
-                              <ShieldCheck className="w-3 h-3 mr-1" /> Verified
-                            </span>
-                          ) : user.status === 'rejected' ? (
-                            <span className="px-3 py-1 inline-flex items-center text-xs font-medium rounded-full bg-rose-100 text-rose-800">
-                              <XCircle className="w-3 h-3 mr-1" /> Rejected
-                            </span>
-                          ) : user.status === 'unverified' ? (
-                            <span className="px-3 py-1 inline-flex items-center text-xs font-medium rounded-full bg-slate-100 text-slate-600">
-                              <ShieldAlert className="w-3 h-3 mr-1" /> Unverified
-                            </span>
-                          ) : (
-                            <span className="px-3 py-1 inline-flex items-center text-xs font-medium rounded-full bg-amber-100 text-amber-800">
-                              <Clock className="w-3 h-3 mr-1" /> Pending
-                            </span>
-                          )}
-                          {user.status === 'approved' && user.accountStatus && user.accountStatus !== 'active' && (
-                            <span className={`ml-1 px-2 py-0.5 inline-flex items-center text-xs font-medium rounded-full ${
-                              user.accountStatus === 'warned' ? 'bg-amber-100 text-amber-700' :
-                              user.accountStatus === 'temp_blocked' ? 'bg-orange-100 text-orange-700' :
-                              'bg-rose-100 text-rose-700'
-                            }`}>
-                              {user.accountStatus === 'warned' && <><AlertTriangle className="w-3 h-3 mr-0.5" /> Warned</>}
-                              {user.accountStatus === 'temp_blocked' && <><Lock className="w-3 h-3 mr-0.5" /> Temp Blocked</>}
-                              {user.accountStatus === 'perm_blocked' && <><ShieldOff className="w-3 h-3 mr-0.5" /> Perm Blocked</>}
-                            </span>
-                          )}
+                          {getLaborerStatusBadge(user)}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <div className="flex items-center text-sm text-slate-600">

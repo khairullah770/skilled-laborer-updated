@@ -193,6 +193,20 @@ export const laborerAccountAction = async (
   return response.json();
 };
 
+export const deleteLaborerById = async (id: string) => {
+  const response = await fetch(`${API_URL}/users/${id}`, {
+    method: "DELETE",
+    headers: getAuthHeaders(),
+  });
+
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    throw new Error(err.message || "Failed to delete laborer");
+  }
+
+  return response.json();
+};
+
 // --- Booking APIs ---
 export const fetchBookings = async () => {
   const response = await fetch(`${API_URL}/bookings`, {

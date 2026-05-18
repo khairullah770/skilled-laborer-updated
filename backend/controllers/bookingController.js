@@ -496,11 +496,9 @@ const acceptBooking = async (req, res) => {
     if (booking.laborer.toString() !== req.user._id.toString())
       return res.status(403).json({ message: "Not authorized" });
     if (booking.status !== "Pending" && booking.status !== "Rescheduled") {
-      return res
-        .status(400)
-        .json({
-          message: "Only pending or rescheduled bookings can be accepted",
-        });
+      return res.status(400).json({
+        message: "Only pending or rescheduled bookings can be accepted",
+      });
     }
     booking.status = "Accepted";
     booking.acceptedAt = new Date();
@@ -926,6 +924,10 @@ const rateBooking = async (req, res) => {
       comment = comment.replace(/</g, "").replace(/>/g, "");
     }
 
+    const laborerBeforeUpdate = await User.findById(booking.laborer)
+      .select("rating notificationsEnabled")
+      .session(session);
+
     const stats = await JobRating.aggregate([
       { $match: { laborer: booking.laborer } },
       {
@@ -937,8 +939,29 @@ const rateBooking = async (req, res) => {
       },
     ]).session(session);
 
-    const prevCount = stats[0]?.count || 0;
-    const prevTotal = stats[0]?.total || 0;
+    const toFiniteNumber = (value) => {
+      if (typeof value === "number" && Number.isFinite(value)) return value;
+      if (typeof value === "string") {
+        const parsed = Number(value);
+        return Number.isFinite(parsed) ? parsed : 0;
+      }
+      if (value && typeof value === "object") {
+        if (typeof value.toString === "function") {
+          const parsed = Number(value.toString());
+          return Number.isFinite(parsed) ? parsed : 0;
+        }
+      }
+      return 0;
+    };
+
+    let prevCount = toFiniteNumber(stats[0]?.count);
+    let prevTotal = toFiniteNumber(stats[0]?.total);
+
+    // Preserve existing profile rating as baseline when there are no historical rating docs yet.
+    if (prevCount === 0 && toFiniteNumber(laborerBeforeUpdate?.rating) > 0) {
+      prevCount = 1;
+      prevTotal = toFiniteNumber(laborerBeforeUpdate.rating);
+    }
 
     const [ratingDoc] = await JobRating.create(
       [
@@ -960,8 +983,6 @@ const rateBooking = async (req, res) => {
       { $set: { rating: avg } },
       { session },
     );
-
-    const laborer = await User.findById(booking.laborer).session(session);
 
     const customerName =
       booking.customer.firstName ||
@@ -989,7 +1010,10 @@ const rateBooking = async (req, res) => {
 
     let pushStatus = "skipped";
     try {
-      if (!laborer || laborer.notificationsEnabled === false) {
+      if (
+        !laborerBeforeUpdate ||
+        laborerBeforeUpdate.notificationsEnabled === false
+      ) {
         pushStatus = "disabled";
       } else {
         await sendPushNotification(

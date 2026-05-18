@@ -40,7 +40,7 @@ const registerCustomer = async (req, res) => {
       return res.status(400).json({ message: 'Passwords do not match' });
     }
 
-    // Ensure uniqueness
+    // Ensure uniqueness of email and phone no duplicates allowed
     if (email) {
       const exists = await Customer.findOne({ email });
       if (exists) {
@@ -56,6 +56,7 @@ const registerCustomer = async (req, res) => {
       }
     }
 
+    // Hash password before saving to database
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(password, salt);
 
@@ -92,7 +93,8 @@ const loginCustomer = async (req, res) => {
     } else if (phone) {
       customer = await Customer.findOne({ phone });
     }
-
+    
+    // Check if customer exists and password matches
     if (customer && (await bcrypt.compare(password, customer.password))) {
       return res.json({
         _id: customer._id,

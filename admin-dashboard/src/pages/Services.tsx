@@ -28,6 +28,11 @@ interface Category {
   subcategories: Subcategory[];
 }
 
+const getErrorMessage = (err: unknown): string => {
+  if (err instanceof Error) return err.message;
+  return 'Something went wrong';
+};
+
 const Services = () => {
   const [categories, setCategories] = useState<Category[]>([]);
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
@@ -67,8 +72,8 @@ const Services = () => {
       setLoading(true);
       const data = await fetchCategories();
       setCategories(data);
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err: unknown) {
+      setError(getErrorMessage(err));
     } finally {
       setLoading(false);
     }
@@ -148,8 +153,8 @@ const Services = () => {
       setIsCategoryModalOpen(false);
       setEditingCategory(null);
       loadCategories();
-    } catch (err: any) {
-      alert(err.message);
+    } catch (err: unknown) {
+      alert(getErrorMessage(err));
     }
   };
 
@@ -194,8 +199,8 @@ const Services = () => {
       setIsSubcategoryModalOpen(false);
       setEditingSubcategory(null);
       loadCategories();
-    } catch (err: any) {
-      alert(err.message);
+    } catch (err: unknown) {
+      alert(getErrorMessage(err));
     }
   };
 
@@ -204,8 +209,8 @@ const Services = () => {
       try {
         await deleteCategory(id);
         loadCategories();
-      } catch (err: any) {
-        alert(err.message);
+      } catch (err: unknown) {
+        alert(getErrorMessage(err));
       }
     }
   };
@@ -215,8 +220,8 @@ const Services = () => {
       try {
         await deleteSubcategory(id);
         loadCategories();
-      } catch (err: any) {
-        alert(err.message);
+      } catch (err: unknown) {
+        alert(getErrorMessage(err));
       }
     }
   };
@@ -315,7 +320,9 @@ const Services = () => {
               </div>
               <select
                 value={searchFilter}
-                onChange={(e) => setSearchFilter(e.target.value as any)}
+                onChange={(e) =>
+                  setSearchFilter(e.target.value as 'all' | 'category' | 'subcategory')
+                }
                 className="px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none bg-white text-slate-700 text-sm"
               >
                 <option value="all">All</option>

@@ -16,6 +16,7 @@ const {
   changePassword,
   getPublicLaborerProfile,
   laborerAccountAction,
+  deleteLaborer,
 } = require("../controllers/userController");
 const upload = require("../middleware/upload");
 const { protect, admin } = require("../middleware/authMiddleware");
@@ -32,8 +33,11 @@ router.put("/availability", protect, updateAvailability);
 router.put("/subcategories", protect, updateSubcategories);
 router.put("/change-password", protect, changePassword);
 router.get("/profile", protect, getUserProfile);
-router.route("/:id").get(protect, getUserById); // Laborer can view self, Admin can view all
-router.route("/:id/status").put(protect, admin, updateUserStatus);
+router
+  .route("/:id")
+  .get(protect, getUserById)
+  .delete(protect, admin, deleteLaborer); // Laborer can view self, Admin can view all
+router.route("/:id/status").put(protect, admin, updateUserStatus); //for admin to activate/deactivate laborer accounts
 router.route("/:id/account-action").put(protect, admin, laborerAccountAction);
 router.get("/:id/public", getPublicLaborerProfile);
 router.route("/:id/verification").put(

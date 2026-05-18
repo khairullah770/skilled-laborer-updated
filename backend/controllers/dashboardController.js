@@ -87,12 +87,9 @@ const getLaborerStats = async (req, res) => {
     ]);
 
     const totalReviews = ratingStats[0]?.count || 0;
-    // Use JobRating-computed average if reviews exist, otherwise fall back to User.rating
-    // (User.rating is kept in sync by rateBooking and may also reflect seeded/imported data)
-    const avgRating =
-      totalReviews > 0
-        ? ratingStats[0].total / totalReviews
-        : user?.rating || 0;
+    // Keep UI consistent across app by treating User.rating as the primary source.
+    // This value is updated by the rating flow and may include initial seeded baseline.
+    const avgRating = Number(user?.rating || 0);
 
     // Get real rating breakdown from JobRating collection
     const breakdownAgg = await JobRating.aggregate([

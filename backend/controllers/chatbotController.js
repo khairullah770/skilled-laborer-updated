@@ -501,7 +501,7 @@ const sendMessage = async (req, res) => {
       location: conversation.context.location,
     });
 
-    // Call Gemini API
+    // Call API
     let aiReply;
     try {
       aiReply = await callGemini(systemPrompt, recentMessages);

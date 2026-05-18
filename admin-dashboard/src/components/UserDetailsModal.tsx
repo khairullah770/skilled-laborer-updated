@@ -1,10 +1,10 @@
 import { saveAs } from 'file-saver';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { AlertTriangle, Briefcase, Calendar, Check, Download, FileText, Lock, Mail, MapPin, Phone, Printer, Shield, ShieldAlert, ShieldOff, Star, Unlock, X } from 'lucide-react';
-import React, { useEffect, useState } from 'react';
+import { AlertTriangle, Briefcase, Calendar, Check, Download, FileText, Lock, Mail, MapPin, Phone, Printer, Shield, ShieldAlert, ShieldOff, Star, Trash2, Unlock, X } from 'lucide-react';
+import React, { useCallback, useEffect, useState } from 'react';
 import * as XLSX from 'xlsx';
-import { BASE_URL, fetchUserById, laborerAccountAction } from '../api';
+import { BASE_URL, deleteLaborerById, fetchUserById, laborerAccountAction } from '../api';
 
 interface UserDetailsModalProps {
   isOpen: boolean;
@@ -25,7 +25,7 @@ interface VerificationHistory {
         dob?: string;
         address?: string;
         experience?: string;
-        categories?: any[];
+        categories?: string[];
         profileImage?: string;
         idCardImage?: string;
     };
@@ -74,15 +74,17 @@ const UserDetailsModal: React.FC<UserDetailsModalProps> = ({ isOpen, onClose, us
   const [error, setError] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
 
-  useEffect(() => {
-    if (isOpen && userId) {
-      loadUserDetails(userId);
-    } else {
-      setUser(null);
-    }
-  }, [isOpen, userId]);
+    const getErrorMessage = (err: unknown, fallback: string) => {
+        if (err instanceof Error && err.message) return err.message;
+        return fallback;
+    };
 
-  const loadUserDetails = async (id: string) => {
+    const getLastAutoTableFinalY = (doc: jsPDF) => {
+        const withAutoTable = doc as unknown as { lastAutoTable?: { finalY?: number } };
+        return withAutoTable.lastAutoTable?.finalY ?? 40;
+    };
+
+    const loadUserDetails = useCallback(async (id: string) => {
     try {
       setLoading(true);
       setError(null);
@@ -92,7 +94,7 @@ const UserDetailsModal: React.FC<UserDetailsModalProps> = ({ isOpen, onClose, us
       if (data.status === 'pending' && data.verificationHistory) {
         const lastPending = [...data.verificationHistory]
           .reverse()
-          .find((h: any) => h.status === 'pending' && h.submittedData);
+                    .find((h: VerificationHistory) => h.status === 'pending' && h.submittedData);
         
         if (lastPending && lastPending.submittedData) {
           const sd = lastPending.submittedData;
@@ -121,12 +123,20 @@ const UserDetailsModal: React.FC<UserDetailsModalProps> = ({ isOpen, onClose, us
       }
       
       setUser(data);
-    } catch (err: any) {
-      setError(err?.message || 'Failed to load user details');
+        } catch (err: unknown) {
+            setError(getErrorMessage(err, 'Failed to load user details'));
     } finally {
       setLoading(false);
     }
-  };
+    }, []);
+
+    useEffect(() => {
+        if (isOpen && userId) {
+            loadUserDetails(userId);
+        } else {
+            setUser(null);
+        }
+    }, [isOpen, userId, loadUserDetails]);
 
   const handlePrint = () => {
     window.print();
@@ -188,12 +198,13 @@ const UserDetailsModal: React.FC<UserDetailsModalProps> = ({ isOpen, onClose, us
             h.reason || '-'
         ]);
         
-        doc.text('Verification History', 14, (doc as any).lastAutoTable.finalY + 15);
+        const finalY = getLastAutoTableFinalY(doc);
+        doc.text('Verification History', 14, finalY + 15);
         
         autoTable(doc, {
             head: [['Date', 'Status', 'Reason']],
             body: historyData,
-            startY: (doc as any).lastAutoTable.finalY + 20,
+            startY: finalY + 20,
         });
     }
 
@@ -259,12 +270,33 @@ const UserDetailsModal: React.FC<UserDetailsModalProps> = ({ isOpen, onClose, us
       // Reload user details
       await loadUserDetails(user._id);
       onAccountAction?.();
-    } catch (err: any) {
-      alert(err?.message || 'Failed to perform action');
+        } catch (err: unknown) {
+            alert(getErrorMessage(err, 'Failed to perform action'));
     } finally {
       setActionLoading(false);
     }
   };
+
+    const handleRemoveLaborer = async () => {
+        if (!user || user.role !== 'laborer') return;
+
+        const confirmed = window.confirm(
+            `Are you sure you want to permanently remove ${user.name || 'this laborer'}?\n\nThis action deletes the laborer account and cannot be undone.`,
+        );
+        if (!confirmed) return;
+
+        try {
+            setActionLoading(true);
+            await deleteLaborerById(user._id);
+            alert('Laborer removed successfully.');
+            onAccountAction?.();
+            onClose();
+        } catch (err: unknown) {
+            alert(getErrorMessage(err, 'Failed to remove laborer'));
+        } finally {
+            setActionLoading(false);
+        }
+    };
 
   const getRatingRecommendation = (rating: number, completedJobs: number) => {
     if (completedJobs < 10) return null; // No action if less than 10 services
@@ -370,7 +402,7 @@ const UserDetailsModal: React.FC<UserDetailsModalProps> = ({ isOpen, onClose, us
                                         }`}>
                                             {user.status}
                                         </span>
-                                        {user.role === 'laborer' && user.status === 'approved' && getAccountStatusBadge(user.accountStatus)}
+                                        {user.role === 'laborer' && getAccountStatusBadge(user.accountStatus)}
                                     </div>
                                 </div>
                                 <div className="text-right">
@@ -456,7 +488,7 @@ const UserDetailsModal: React.FC<UserDetailsModalProps> = ({ isOpen, onClose, us
                     </div>
 
                     {/* Rating-Based Management Panel */}
-                    {user.role === 'laborer' && user.status === 'approved' && (() => {
+                    {user.role === 'laborer' && (() => {
                         const rating = user.rating || 0;
                         const jobs = user.completedJobs || 0;
                         const recommendation = getRatingRecommendation(rating, jobs);
@@ -606,7 +638,7 @@ const UserDetailsModal: React.FC<UserDetailsModalProps> = ({ isOpen, onClose, us
                                             </button>
                                         </div>
                                     ) : (
-                                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                             <button
                                                 onClick={() => handleAccountAction('warning')}
                                                 disabled={actionLoading || jobs < 10}
@@ -624,15 +656,6 @@ const UserDetailsModal: React.FC<UserDetailsModalProps> = ({ isOpen, onClose, us
                                             >
                                                 <Lock className="w-4 h-4 mr-1.5" />
                                                 {actionLoading ? '...' : 'Temp Block'}
-                                            </button>
-                                            <button
-                                                onClick={() => handleAccountAction('perm_block')}
-                                                disabled={actionLoading || jobs < 10}
-                                                className="flex items-center justify-center py-2.5 px-3 bg-rose-600 text-white rounded-lg hover:bg-rose-700 transition-colors text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed"
-                                                title={jobs < 10 ? 'Requires at least 10 completed jobs' : 'Permanently block'}
-                                            >
-                                                <ShieldOff className="w-4 h-4 mr-1.5" />
-                                                {actionLoading ? '...' : 'Perm Block'}
                                             </button>
                                         </div>
                                     )}
@@ -659,6 +682,26 @@ const UserDetailsModal: React.FC<UserDetailsModalProps> = ({ isOpen, onClose, us
                         </div>
                         );
                     })()}
+
+                    {/* Documents */}
+                    {user.role === 'laborer' && (
+                        <div className="print:hidden">
+                            <h3 className="text-lg font-bold text-rose-700 mb-4">Danger Zone</h3>
+                            <div className="bg-rose-50 border border-rose-200 rounded-xl p-5">
+                                <p className="text-sm text-rose-700 mb-4">
+                                    Removing this laborer will permanently delete their account from the database.
+                                </p>
+                                <button
+                                    onClick={handleRemoveLaborer}
+                                    disabled={actionLoading}
+                                    className="inline-flex items-center justify-center py-2.5 px-4 bg-rose-600 text-white rounded-lg hover:bg-rose-700 transition-colors text-sm font-medium disabled:opacity-50"
+                                >
+                                    <Trash2 className="w-4 h-4 mr-2" />
+                                    {actionLoading ? 'Removing...' : 'Remove Laborer'}
+                                </button>
+                            </div>
+                        </div>
+                    )}
 
                     {/* Documents */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-8">

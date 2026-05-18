@@ -5,6 +5,10 @@ const User = require("../models/User");
 const ServiceOffering = require("../models/ServiceOffering");
 const Notification = require("../models/Notification");
 const Booking = require("../models/Booking");
+const Chat = require("../models/Chat");
+const Message = require("../models/Message");
+const JobRating = require("../models/JobRating");
+const Review = require("../models/Review");
 const { sendEmail, notifyAdmin } = require("../utils/notificationService");
 
 // Generate JWT
@@ -229,7 +233,7 @@ const submitVerificationDetails = async (req, res) => {
       const submittedProfileImage =
         latestSubmission?.submittedData?.profileImage || user.profileImage;
 
-      // 1. Find all admins
+      
       const admins = await User.find({ role: "admin" });
 
       if (admins.length > 0) {
@@ -938,6 +942,49 @@ const laborerAccountAction = async (req, res) => {
   }
 };
 
+// @desc    Permanently delete a laborer account
+// @route   DELETE /api/users/:id
+// @access  Private/Admin
+const deleteLaborer = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ message: "Invalid laborer id" });
+    }
+
+    const laborer = await User.findById(id);
+    if (!laborer) {
+      return res.status(404).json({ message: "Laborer not found" });
+    }
+
+    if (laborer.role !== "laborer") {
+      return res
+        .status(400)
+        .json({ message: "Delete action is only allowed for laborers" });
+    }
+
+    await Promise.all([
+      ServiceOffering.deleteMany({ laborer: laborer._id }),
+      Chat.deleteMany({ laborer: laborer._id }),
+      Message.deleteMany({ senderId: laborer._id, senderRole: "laborer" }),
+      Notification.deleteMany({ recipient: laborer._id }),
+      JobRating.deleteMany({ laborer: laborer._id }),
+      Review.deleteMany({ laborer: laborer._id }),
+    ]);
+
+    await User.deleteOne({ _id: laborer._id });
+
+    return res.json({
+      message: "Laborer removed successfully",
+      removedLaborerId: id,
+    });
+  } catch (error) {
+    console.error("Delete laborer error:", error);
+    return res.status(500).json({ message: error.message });
+  }
+};
+
 module.exports = {
   registerUser,
   loginUser,
@@ -954,4 +1001,5 @@ module.exports = {
   changePassword,
   getPublicLaborerProfile,
   laborerAccountAction,
+  deleteLaborer,
 };

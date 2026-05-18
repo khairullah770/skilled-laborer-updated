@@ -159,6 +159,7 @@ skilled-labor-app/
 - **Rate & Review** — Rate completed jobs (0.5–5 stars) with comments
 - **Notifications** — Real-time updates for booking status changes, messages, and more
 - **Profile Management** — Edit profile, upload profile photo, update location
+- **AI Assistant Chatbot** — In-app support assistant with fast app-aware responses for booking flow, service/pricing queries, and booking status help
 
 ### Laborer Features
 
@@ -168,7 +169,7 @@ skilled-labor-app/
 - **Verification System** — Submit ID documents and profile for admin verification (unverified → pending → approved/rejected)
 - **Real-Time Chat** — Communicate with customers per booking
 - **Location Tracking** — GPS-based location updates for customer visibility
-- **Availability Toggle** — Control online/offline status
+- **Availability Toggle** — Control online/offline status (going online requires a valid current location)
 
 ### Admin Features
 
@@ -189,6 +190,7 @@ skilled-labor-app/
 - **Image Upload** — Profile photos, ID cards, category icons, subcategory images, and work photos (max 10MB)
 - **Offline Resilience** — API retry logic and AsyncStorage caching for bookings
 - **Database Resilience** — MongoDB connection with exponential backoff retry (up to 5 attempts)
+- **Chatbot Reliability Guardrails** — Cached service catalog, deterministic app-support replies, strict non-empty fallback, and bounded AI timeout/failover
 
 ---
 
@@ -360,6 +362,15 @@ skilled-labor-app/
 | GET    | `/api/chat/:chatId/messages`      | Protected | Get messages (paginated)     |
 | POST   | `/api/chat/:chatId/messages`      | Protected | Send message (REST fallback) |
 
+### Chatbot (Customer Support)
+
+| Method | Endpoint                   | Auth     | Description                                        |
+| ------ | -------------------------- | -------- | -------------------------------------------------- |
+| POST   | `/api/chatbot/message`     | Customer | Send message and receive assistant reply           |
+| GET    | `/api/chatbot/history`     | Customer | Get active chatbot conversation history            |
+| DELETE | `/api/chatbot/history`     | Customer | Clear/reset chatbot conversation                   |
+| GET    | `/api/chatbot/suggestions` | Customer | Get quick starter suggestions for customer support |
+
 ### Dashboard
 
 | Method | Endpoint                       | Auth    | Description         |
@@ -400,6 +411,8 @@ skilled-labor-app/
 ---
 
 ## Mobile App Screens
+
+![App mockup](mockup.png)
 
 ### Auth Flow
 
@@ -532,6 +545,16 @@ Update the API URL in `constants/Api.ts` to point to your backend:
 export const API_URL = "http://<your-ip>:5000";
 ```
 
+Or set `EXPO_PUBLIC_API_URL` before starting Expo (recommended):
+
+```bash
+# PowerShell
+$env:EXPO_PUBLIC_API_URL="http://<your-ip>:5000"
+npm start
+```
+
+Note: Backend auto-retries ports if 5000 is occupied (5001, 5002, ...). If this happens, point `EXPO_PUBLIC_API_URL` to the active backend port shown in backend logs.
+
 Start the Expo development server:
 
 ```bash
@@ -581,11 +604,13 @@ node seedAdmin.js
 
 ### Backend (`backend/.env`)
 
-| Variable     | Description               | Default  |
-| ------------ | ------------------------- | -------- |
-| `PORT`       | Server port               | `5000`   |
-| `MONGO_URI`  | MongoDB connection string | —        |
-| `JWT_SECRET` | JWT signing secret        | `secret` |
+| Variable                  | Description                                         | Default                              |
+| ------------------------- | --------------------------------------------------- | ------------------------------------ |
+| `PORT`                    | Server port                                         | `5000`                               |
+| `MONGO_URI`               | MongoDB connection string                           | —                                    |
+| `JWT_SECRET`              | JWT signing secret                                  | `secret`                             |
+| `OPENROUTER_API_KEY`      | API key for customer chatbot and AI recommendations | —                                    |
+| `OPENROUTER_PICKUP_MODEL` | Optional model override for pickup recommendations  | `mistralai/mistral-7b-instruct:free` |
 
 ---
 
