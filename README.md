@@ -1,3 +1,5 @@
+![App mockup](mockup.png)
+
 # Skilled Labor App
 
 A full-stack service marketplace connecting **customers** with **skilled laborers** (plumbers, electricians, carpenters, etc.) for home services. Built with **React Native** (Expo) for mobile, **Node.js/Express** for the backend, and **React/Vite** for the admin dashboard.
@@ -407,12 +409,6 @@ skilled-labor-app/
 3. When a job is **Completed**, the chat's `isActive` flag is set to `false`
 4. Both Socket.IO and REST endpoints block sending to inactive chats
 5. The UI shows a locked banner: _"This chat is closed. The job has been completed."_
-
----
-
-## Mobile App Screens
-
-![App mockup](mockup.png)
 
 ### Auth Flow
 
